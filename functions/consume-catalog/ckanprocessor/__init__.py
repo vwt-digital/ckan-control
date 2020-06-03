@@ -28,8 +28,7 @@ class CKANProcessor(object):
                     {"key": "Publisher", "value": data.get('publisher').get('name')},
                     {"key": "Keywords", "value": ', '.join(data.get('keyword')) if 'keyword' in data else ""},
                     {"key": "Temporal", "value": data.get('temporal')},
-                    {"key": "Accrual Periodicity", "value": data.get('accrualPeriodicity')},
-                    {"key": "Project ID", "value": selector_data.get('projectId')}
+                    {"key": "Accrual Periodicity", "value": data.get('accrualPeriodicity')}
                 ]
 
                 data_dict = {
@@ -38,6 +37,7 @@ class CKANProcessor(object):
                     "notes": data['rights'],
                     "owner_org": 'dat',
                     "maintainer": data.get('contactPoint').get('fn'),
+                    "project_id": selector_data.get('projectId'),
                     "state": "active",
                     "tags": tag_dict,
                     "extras": dict_list
