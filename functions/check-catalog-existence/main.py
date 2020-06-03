@@ -1,108 +1,131 @@
 import os
 import logging
-import requests
+import config
+import google.auth
+import pytz
+import datetime
 import json
-import re
 
-from ckanapi import RemoteCKAN, NotFound
+from google.auth import iam
+from google.auth.transport import requests as gcp_requests
+from google.oauth2 import service_account
+from google.cloud import storage, datastore, firestore, exceptions as gcp_exceptions
 
+from ckanapi import RemoteCKAN
+
+TOKEN_URI = 'https://accounts.google.com/o/oauth2/token'  # nosec
 logging.basicConfig(level=logging.INFO)
 
 
 class CKANProcessor(object):
     def __init__(self):
-        self.ckan_api_key = os.environ.get('CKAN_API_KEY', 'Required parameter is missing')
-        self.ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
-        self.host = RemoteCKAN(self.ckan_host, apikey=self.ckan_api_key)
-        self.github_header = {"Authorization": "Bearer " + os.environ.get('GITHUB_API_KEY', 'Required parameter is missing')}
+        self.host = RemoteCKAN(os.environ.get('CKAN_SITE_URL'), apikey=os.environ.get('CKAN_API_KEY'))
 
-        # GitHub url format: 'https://github.com/<org>/<repo>/blob/<branch>/<path>'
-        self.re_github_url = r"(?:https://github.com/)(vwt-digital|vwt-digital-config+)(?:/)([\w-]+)(?:/blob/)(master|develop+)(?:/)(.+)"
+        self.credentials = request_auth_token()
+        self.stg_client = storage.Client(credentials=self.credentials)
+        self.ds_client = datastore.Client(credentials=self.credentials)
+        self.fs_client = firestore.Client(credentials=self.credentials)
 
     def process(self):
-        if self.host.action.site_read():
+        try:
+            self.host.action.site_read()
+        except Exception:
+            logging.error('CKAN not reachable')
+        else:
             try:
                 package_list = self.host.action.package_list()
             except Exception:
                 raise
 
             logging.info(f"Checking data-catalog existence for {len(package_list)} packages")
-            packages_without_url = 0
 
             for key in package_list:
-                try:
-                    package = self.host.action.package_show(id=key)
-                except Exception as e:
-                    logging.info(f"Failed to retrieve '{key}' package: {str(e)}")
-                    pass
-                    continue
+                package = self.host.action.package_show(id=key)
+                package_name = package.get('name', '').replace('_', '-')
 
-                if 'github_url' in package:
-                    name = package['name'].replace("_", "/")
-                    github_url = package['github_url']
-
-                    if re.search(self.re_github_url, github_url):
-                        match = re.match(self.re_github_url, github_url)
-
-                        owner = match.group(1)
-                        repo = match.group(2)
-                        branch = match.group(3)
-                        path = match.group(4)
-
-                        url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-                        params = {"ref": branch}
-
-                        try:
-                            response = requests.get(url, params=params, headers=self.github_header)
-                        except Exception as e:
-                            logging.error(f"Exception on package '{name}': {str(e)}")
-                        else:
-                            if response.status_code in [200, 404]:
-                                data = json.loads(response.content)
-
-                                if 'html_url' in data and data['html_url'] == github_url:
-                                    logging.info(f"Found data-catalog for package '{name}'")
-                                    continue
-
-                                self.delete_package_and_resources(package)  # Deleting package and it's resources
-                                continue
-
-                            logging.info(f"Status code {response.status_code} for package '{name}'")
-                    else:
-                        logging.error(f"Package '{name}' has an incorrect GitHub Url, the format is " +
-                                      f"[https://github.com/<org>/<repo>/blob/<branch>/<path>]: {github_url}")
+                if 'project_id' in package:
+                    CKANPackage(package=package, stg_client=self.stg_client).process()
                 else:
-                    packages_without_url += 1
+                    logging.debug(f"No Project ID specified for package '{package_name}'")
 
-            logging.info(f"A total of {packages_without_url} of {len(package_list)} packages have no GitHub Url")
+
+class CKANPackage(object):
+    def __init__(self, package, stg_client):
+        self.package = package
+        self.package_name = package.get('name', '').replace('_', '-')
+        self.project_id = package.get('project_id', '')
+        self.stg_client = stg_client
+
+    def process(self):
+        if self.package.get('resources', None):
+            for resource in self.package.get('resources', []):
+                try:
+                    if resource['format'] == 'blob-storage':
+                        self.check_storage(resource)
+                    else:
+                        logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
+                        continue
+                except ResourceNotFound as e:
+                    logging.error(json.dumps(e.properties))
+                    continue
         else:
-            logging.error('CKAN not reachable')
+            logging.error(f"Dataset '{self.package_name}' does not have any resources")
 
-    def delete_package_and_resources(self, package):
-        logging.info(f"No data-catalog found for '{package['name']}', purging package and resources")
-
-        # Delete package resources
-        for resource in package.get('resources', []):
-            try:
-                self.host.action.resource_delete(id=resource['id'])
-            except NotFound:
-                pass
-            except Exception as e:  # An exception occurred
-                logging.error(f"Exception occurred while deleting resource '{resource['name']}': {e}")
-
-        # Purging package
+    def check_storage(self, resource):
         try:
-            self.host.action.dataset_purge(id=package['id'])
-        except NotFound:
-            pass
-        except Exception as e:  # An exception occurred
-            logging.error(f"Exception occurred while deleting package '{package['name']}': {e}")
+            buckets = self.stg_client.list_buckets(project=self.project_id, fields='items/name')
+        except (gcp_exceptions.NotFound, gcp_exceptions.Forbidden):
+            raise ResourceNotFound(self.package, resource)
+        else:
+            for bucket in buckets:
+                if bucket.name == resource['name']:
+                    return True
+
+            raise ResourceNotFound(self.package, resource)
+
+
+def request_auth_token():
+    try:
+        credentials, project_id = google.auth.default(scopes=['https://www.googleapis.com/auth/iam'])
+
+        request = gcp_requests.Request()
+        credentials.refresh(request)
+
+        signer = iam.Signer(request, credentials, config.DELEGATED_SA)
+        creds = service_account.Credentials(
+            signer=signer,
+            service_account_email=config.DELEGATED_SA,
+            token_uri=TOKEN_URI,
+            scopes=['https://www.googleapis.com/auth/cloud-platform'],
+            subject=config.DELEGATED_SA)
+    except Exception:
+        raise
+
+    return creds
+
+
+class ResourceNotFound(Exception):
+    def __init__(self, package, resource=None):
+        timezone = pytz.timezone("Europe/Amsterdam")
+        timestamp = datetime.datetime.now(tz=timezone)
+
+        self.properties = {
+            "error": {
+                "message": "Resource not found",
+                "project_id": package.get('projectId'),
+                "package_name": package.get('name').replace('_', '-'),
+                "resource_name": resource.get('name', ''),
+                "type": resource.get('format', ''),
+                "access_url": resource.get('url', ''),
+                "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            }
+        }
 
 
 def check_catalog_existence(request):
     logging.info("Initialized function")
 
-    if 'CKAN_API_KEY' in os.environ and 'CKAN_SITE_URL' in os.environ and 'GITHUB_API_KEY' in os.environ:
+    if 'CKAN_API_KEY' in os.environ and 'CKAN_SITE_URL' in os.environ:
         CKANProcessor().process()
     else:
         logging.error('Function has insufficient configuration')
