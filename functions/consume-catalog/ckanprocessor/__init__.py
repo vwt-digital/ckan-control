@@ -29,7 +29,7 @@ class CKANProcessor(object):
                     {"key": "Keywords", "value": ', '.join(data.get('keyword')) if 'keyword' in data else ""},
                     {"key": "Temporal", "value": data.get('temporal')},
                     {"key": "Accrual Periodicity", "value": data.get('accrualPeriodicity')},
-                    {"key": "Project ID", "value": data.get('projectId')}
+                    {"key": "Project ID", "value": selector_data.get('projectId')}
                 ]
 
                 data_dict = {
