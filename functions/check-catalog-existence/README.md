@@ -23,7 +23,8 @@ The check-catalog-existence works as follows:
 This function depends on a Service Account (hereafter SA) with specific permissions to access project resources. Because the pre-defined roles within the platform doesn't suit our needs, 
 a custom role has to be defined and assigned to the SA. To create a custom role within GCP you can follow [this guide](https://cloud.google.com/iam/docs/creating-custom-roles). 
 The custom role must have the following permissions:
-- `storage.buckets.list`
+- `storage.buckets.list`: Listing all buckets within a project
+- `serviceusage.services.list`: Listing all enabled services in a project
 
 After creating this role, assign it to the delegated SA on the highest level possible.
 

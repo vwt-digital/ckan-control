@@ -5,13 +5,14 @@ import google.auth
 import pytz
 import datetime
 import json
+import googleapiclient.discovery
 
 from google.auth import iam
 from google.auth.transport import requests as gcp_requests
 from google.oauth2 import service_account
-from google.cloud import storage, datastore, firestore, exceptions as gcp_exceptions
+from google.cloud import storage, exceptions as gcp_exceptions
 
-from ckanapi import RemoteCKAN
+from ckanapi import RemoteCKAN, NotFound
 
 TOKEN_URI = 'https://accounts.google.com/o/oauth2/token'  # nosec
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +24,10 @@ class CKANProcessor(object):
 
         self.credentials = request_auth_token()
         self.stg_client = storage.Client(credentials=self.credentials)
-        self.ds_client = datastore.Client(credentials=self.credentials)
-        self.fs_client = firestore.Client(credentials=self.credentials)
+        self.su_client = googleapiclient.discovery.build(
+            'serviceusage', 'v1', credentials=self.credentials, cache_discovery=False)
+
+        self.project_services = {}
 
     def process(self):
         try:
@@ -40,48 +43,72 @@ class CKANProcessor(object):
             logging.info(f"Checking data-catalog existence for {len(package_list)} packages")
 
             for key in package_list:
-                package = self.host.action.package_show(id=key)
-                package_name = package.get('name', '').replace('_', '-')
-
-                if 'project_id' in package:
-                    CKANPackage(package=package, stg_client=self.stg_client).process()
-                else:
-                    logging.debug(f"No Project ID specified for package '{package_name}'")
-
-
-class CKANPackage(object):
-    def __init__(self, package, stg_client):
-        self.package = package
-        self.package_name = package.get('name', '').replace('_', '-')
-        self.project_id = package.get('project_id', '')
-        self.stg_client = stg_client
-
-    def process(self):
-        if self.package.get('resources', None):
-            for resource in self.package.get('resources', []):
                 try:
-                    if resource['format'] == 'blob-storage':
-                        self.check_storage(resource)
-                    else:
-                        logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
-                        continue
-                except ResourceNotFound as e:
-                    logging.error(json.dumps(e.properties))
+                    package = self.host.action.package_show(id=key)
+                except NotFound:
+                    logging.error(f"Package with key '{key}' not found")
                     continue
-        else:
-            logging.error(f"Dataset '{self.package_name}' does not have any resources")
+                else:
+                    package_name = package.get('name', '').replace('_', '-')
 
-    def check_storage(self, resource):
-        try:
-            buckets = self.stg_client.list_buckets(project=self.project_id, fields='items/name')
-        except (gcp_exceptions.NotFound, gcp_exceptions.Forbidden):
-            raise ResourceNotFound(self.package, resource)
-        else:
-            for bucket in buckets:
-                if bucket.name == resource['name']:
-                    return True
+                    if 'project_id' in package:
+                        project_id = package['project_id']
+                        if project_id not in self.project_services:
+                            self.project_services[project_id] = self.get_project_services(project_id)
 
-            raise ResourceNotFound(self.package, resource)
+                        self.Package(
+                            package=package,
+                            stg_client=self.stg_client,
+                            project_services=self.project_services.get(project_id, [])).process()
+                    else:
+                        logging.debug(f"No Project ID specified for package '{package_name}'")
+
+    def get_project_services(self, project_id):
+        response = self.su_client.services().list(parent=f"projects/{project_id}", filter="state:ENABLED").execute()
+        return [service.get('config').get('name') for service in response.get('services', [])]
+
+    class Package(object):
+        def __init__(self, package, stg_client, project_services):
+            self.package = package
+            self.package_name = package.get('name', '').replace('_', '-')
+            self.project_id = package.get('project_id', '')
+            self.stg_client = stg_client
+            self.project_services = project_services
+
+        def process(self):
+            if self.package.get('resources', None):
+                for resource in self.package.get('resources', []):
+                    try:
+                        if resource['format'] == 'blob-storage':
+                            self.check_storage(resource)
+                        elif resource['format'] in ['datastore', 'datastore-index']:
+                            self.check_service(resource, 'datastore.googleapis.com')
+                        elif resource['format'] == 'firestore':
+                            self.check_service(resource, 'firestore.googleapis.com')
+                        else:
+                            logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
+                            continue
+                    except ResourceNotFound as e:
+                        logging.error(json.dumps(e.properties))
+                        continue
+            else:
+                logging.error(f"Dataset '{self.package_name}' does not have any resources")
+
+        def check_storage(self, resource):
+            try:
+                buckets = self.stg_client.list_buckets(project=self.project_id, fields='items/name')
+            except (gcp_exceptions.NotFound, gcp_exceptions.Forbidden):
+                raise ResourceNotFound(self.package, resource)
+            else:
+                for bucket in buckets:
+                    if bucket.name == resource['name']:
+                        return True
+
+                raise ResourceNotFound(self.package, resource)
+
+        def check_service(self, resource, service_name):
+            if service_name not in self.project_services:
+                raise ResourceNotFound(self.package, resource)
 
 
 def request_auth_token():
