@@ -26,6 +26,8 @@ The custom role must have the following permissions:
 - `bigquery.datasets.get`: Listing all BigQuery databases in a project
 - `cloudsql.databases.list`: Listing all Cloud SQL instance databases in a project
 - `cloudsql.instances.list`: Listing all Cloud SQL instances in a project
+- `pubsub.subscriptions.list`: Listing all Pub/Sub subscriptions in a project
+- `pubsub.topics.list`: Listing all Pub/Sub topics in a project
 - `serviceusage.services.list`: Listing all enabled services in a project
 - `storage.buckets.list`: Listing all buckets within a project
 

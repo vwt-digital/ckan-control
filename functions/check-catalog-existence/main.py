@@ -25,6 +25,8 @@ class CKANProcessor(object):
         self.credentials = request_auth_token()
         self.stg_client = storage.Client(credentials=self.credentials)
         self.bq_client = bigquery.Client(credentials=self.credentials)
+        self.ps_client = googleapiclient.discovery.build(
+            'pubsub', 'v1', credentials=self.credentials, cache_discovery=False)
         self.su_client = googleapiclient.discovery.build(
             'serviceusage', 'v1', credentials=self.credentials, cache_discovery=False)
         self.sql_client = googleapiclient.discovery.build(
@@ -63,6 +65,7 @@ class CKANProcessor(object):
                             package=package,
                             stg_client=self.stg_client,
                             bq_client=self.bq_client,
+                            ps_client=self.ps_client,
                             sql_client=self.sql_client,
                             project_services=self.project_services.get(project_id, [])).process()
                     else:
@@ -73,14 +76,16 @@ class CKANProcessor(object):
         return [service.get('config').get('name') for service in response.get('services', [])]
 
     class Package(object):
-        def __init__(self, package, stg_client, bq_client, sql_client, project_services):
+        def __init__(self, package, stg_client, bq_client, ps_client, sql_client, project_services):
             self.package = package
             self.package_name = package.get('name', '').replace('_', '-')
             self.project_id = package.get('project_id', '')
+            self.project_services = project_services
+
             self.stg_client = stg_client
             self.bq_client = bq_client
+            self.ps_client = ps_client
             self.sql_client = sql_client
-            self.project_services = project_services
 
         def process(self):
             if self.package.get('resources', None):
@@ -97,6 +102,8 @@ class CKANProcessor(object):
                                 self.check_cloudsql(resource)
                             elif resource['format'] == 'bigquery-dataset':
                                 self.check_bigquery(resource)
+                            elif resource['format'] in ['topic', 'subscription']:
+                                self.check_pubsub(resource, resource['format'])
                             else:
                                 logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
                                 continue
@@ -143,6 +150,17 @@ class CKANProcessor(object):
             if resource['name'] not in datasets:
                 raise ResourceNotFound(self.package, resource)
 
+        def check_pubsub(self, resource, format):
+            if format == 'subscription':
+                subscriptions = self.ps_client.projects().subscriptions().list(project=f"projects/{self.project_id}").execute()
+                resources = [sub['name'].split('/')[-1] for sub in subscriptions.get('subscriptions', [])]
+            else:
+                topics = self.ps_client.projects().topics().list(project=f"projects/{self.project_id}").execute()
+                resources = [top['name'].split('/')[-1] for top in topics.get('topics', [])]
+
+            if resource['name'] not in resources:
+                raise ResourceNotFound(self.package, resource)
+
         def check_service(self, resource, service_name):
             if service_name not in self.project_services:
                 raise ResourceNotFound(self.package, resource)
@@ -176,7 +194,7 @@ class ResourceNotFound(Exception):
         self.properties = {
             "error": {
                 "message": "Resource not found",
-                "project_id": package.get('projectId'),
+                "project_id": package.get('project_id'),
                 "package_name": package.get('name').replace('_', '-'),
                 "resource_name": resource.get('name', ''),
                 "type": resource.get('format', ''),
