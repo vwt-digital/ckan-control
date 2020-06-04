@@ -23,6 +23,7 @@ The check-catalog-existence works as follows:
 This function depends on a Service Account (hereafter SA) with specific permissions to access project resources. Because the pre-defined roles within the platform doesn't suit our needs, 
 a custom role has to be defined and assigned to the SA. To create a custom role within GCP you can follow [this guide](https://cloud.google.com/iam/docs/creating-custom-roles). 
 The custom role must have the following permissions:
+- `bigquery.datasets.get`: Listing all BigQuery databases in a project
 - `cloudsql.databases.list`: Listing all Cloud SQL instance databases in a project
 - `cloudsql.instances.list`: Listing all Cloud SQL instances in a project
 - `serviceusage.services.list`: Listing all enabled services in a project

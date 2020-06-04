@@ -10,7 +10,7 @@ import googleapiclient.discovery
 from google.auth import iam
 from google.auth.transport import requests as gcp_requests
 from google.oauth2 import service_account
-from google.cloud import storage, exceptions as gcp_exceptions
+from google.cloud import storage, bigquery, exceptions as gcp_exceptions
 
 from ckanapi import RemoteCKAN, NotFound
 
@@ -24,6 +24,7 @@ class CKANProcessor(object):
 
         self.credentials = request_auth_token()
         self.stg_client = storage.Client(credentials=self.credentials)
+        self.bq_client = bigquery.Client(credentials=self.credentials)
         self.su_client = googleapiclient.discovery.build(
             'serviceusage', 'v1', credentials=self.credentials, cache_discovery=False)
         self.sql_client = googleapiclient.discovery.build(
@@ -61,6 +62,7 @@ class CKANProcessor(object):
                         self.Package(
                             package=package,
                             stg_client=self.stg_client,
+                            bq_client=self.bq_client,
                             sql_client=self.sql_client,
                             project_services=self.project_services.get(project_id, [])).process()
                     else:
@@ -71,32 +73,38 @@ class CKANProcessor(object):
         return [service.get('config').get('name') for service in response.get('services', [])]
 
     class Package(object):
-        def __init__(self, package, stg_client, sql_client, project_services):
+        def __init__(self, package, stg_client, bq_client, sql_client, project_services):
             self.package = package
             self.package_name = package.get('name', '').replace('_', '-')
             self.project_id = package.get('project_id', '')
             self.stg_client = stg_client
+            self.bq_client = bq_client
             self.sql_client = sql_client
             self.project_services = project_services
 
         def process(self):
             if self.package.get('resources', None):
                 for resource in self.package.get('resources', []):
-                    try:
-                        if resource['format'] == 'blob-storage':
-                            self.check_storage(resource)
-                        elif resource['format'] in ['datastore', 'datastore-index']:
-                            self.check_service(resource, 'datastore.googleapis.com')
-                        elif resource['format'] == 'firestore':
-                            self.check_service(resource, 'firestore.googleapis.com')
-                        elif resource['format'] in ['cloudsql-instance', 'cloudsql-db']:
-                            self.check_cloudsql(resource)
-                        else:
-                            logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
+                    if 'format' in resource and 'name' in resource:
+                        try:
+                            if resource['format'] == 'blob-storage':
+                                self.check_storage(resource)
+                            elif resource['format'] in ['datastore', 'datastore-index']:
+                                self.check_service(resource, 'datastore.googleapis.com')
+                            elif resource['format'] == 'firestore':
+                                self.check_service(resource, 'firestore.googleapis.com')
+                            elif resource['format'] in ['cloudsql-instance', 'cloudsql-db']:
+                                self.check_cloudsql(resource)
+                            elif resource['format'] == 'bigquery-dataset':
+                                self.check_bigquery(resource)
+                            else:
+                                logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
+                                continue
+                        except ResourceNotFound as e:
+                            logging.error(json.dumps(e.properties))
                             continue
-                    except ResourceNotFound as e:
-                        logging.error(json.dumps(e.properties))
-                        continue
+                    else:
+                        logging.error(f"Resource does not have the correct fields: {resource}")
             else:
                 logging.error(f"Dataset '{self.package_name}' does not have any resources")
 
@@ -126,6 +134,13 @@ class CKANProcessor(object):
                 resources = instances
 
             if resource['name'] not in resources:
+                raise ResourceNotFound(self.package, resource)
+
+        def check_bigquery(self, resource):
+            datasets_list = self.bq_client.list_datasets(project=self.project_id)
+            datasets = [dataset.dataset_id for dataset in datasets_list]
+
+            if resource['name'] not in datasets:
                 raise ResourceNotFound(self.package, resource)
 
         def check_service(self, resource, service_name):
