@@ -26,6 +26,8 @@ class CKANProcessor(object):
         self.stg_client = storage.Client(credentials=self.credentials)
         self.su_client = googleapiclient.discovery.build(
             'serviceusage', 'v1', credentials=self.credentials, cache_discovery=False)
+        self.sql_client = googleapiclient.discovery.build(
+            'sqladmin', 'v1beta4', credentials=self.credentials, cache_discovery=False)
 
         self.project_services = {}
 
@@ -59,6 +61,7 @@ class CKANProcessor(object):
                         self.Package(
                             package=package,
                             stg_client=self.stg_client,
+                            sql_client=self.sql_client,
                             project_services=self.project_services.get(project_id, [])).process()
                     else:
                         logging.debug(f"No Project ID specified for package '{package_name}'")
@@ -68,11 +71,12 @@ class CKANProcessor(object):
         return [service.get('config').get('name') for service in response.get('services', [])]
 
     class Package(object):
-        def __init__(self, package, stg_client, project_services):
+        def __init__(self, package, stg_client, sql_client, project_services):
             self.package = package
             self.package_name = package.get('name', '').replace('_', '-')
             self.project_id = package.get('project_id', '')
             self.stg_client = stg_client
+            self.sql_client = sql_client
             self.project_services = project_services
 
         def process(self):
@@ -85,6 +89,8 @@ class CKANProcessor(object):
                             self.check_service(resource, 'datastore.googleapis.com')
                         elif resource['format'] == 'firestore':
                             self.check_service(resource, 'firestore.googleapis.com')
+                        elif resource['format'] in ['cloudsql-instance', 'cloudsql-db']:
+                            self.check_cloudsql(resource)
                         else:
                             logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
                             continue
@@ -104,6 +110,22 @@ class CKANProcessor(object):
                     if bucket.name == resource['name']:
                         return True
 
+                raise ResourceNotFound(self.package, resource)
+
+        def check_cloudsql(self, resource):
+            resources = []
+            instances_response = self.sql_client.instances().list(project=self.project_id).execute()
+            instances = [item['name'] for item in instances_response.get('items', [])]
+
+            if resource['format'] == 'cloudsql-db':
+                for instance in instances:
+                    databases = self.sql_client.databases().list(project=self.project_id, instance=instance).execute()
+                    for database in databases.get('items', []):
+                        resources.append(database['name'])
+            else:
+                resources = instances
+
+            if resource['name'] not in resources:
                 raise ResourceNotFound(self.package, resource)
 
         def check_service(self, resource, service_name):
