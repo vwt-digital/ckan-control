@@ -4,6 +4,7 @@ import config
 import google.auth
 import pytz
 import datetime
+import requests
 import json
 import googleapiclient.discovery
 
@@ -103,7 +104,9 @@ class CKANProcessor(object):
                             elif resource['format'] == 'bigquery-dataset':
                                 self.check_bigquery(resource)
                             elif resource['format'] in ['topic', 'subscription']:
-                                self.check_pubsub(resource, resource['format'])
+                                self.check_pubsub(resource)
+                            elif resource['format'] == 'API':
+                                self.check_api(resource)
                             else:
                                 logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
                                 continue
@@ -150,8 +153,8 @@ class CKANProcessor(object):
             if resource['name'] not in datasets:
                 raise ResourceNotFound(self.package, resource)
 
-        def check_pubsub(self, resource, format):
-            if format == 'subscription':
+        def check_pubsub(self, resource):
+            if resource['format'] == 'subscription':
                 subscriptions = self.ps_client.projects().subscriptions().list(project=f"projects/{self.project_id}").execute()
                 resources = [sub['name'].split('/')[-1] for sub in subscriptions.get('subscriptions', [])]
             else:
@@ -160,6 +163,13 @@ class CKANProcessor(object):
 
             if resource['name'] not in resources:
                 raise ResourceNotFound(self.package, resource)
+
+        def check_api(self, resource):
+            if 'url' in resource:
+                response = requests.get(resource['url'])
+
+                if not response.ok:
+                    raise ResourceNotFound(self.package, resource)
 
         def check_service(self, resource, service_name):
             if service_name not in self.project_services:
