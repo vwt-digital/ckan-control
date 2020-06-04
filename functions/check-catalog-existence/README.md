@@ -1,5 +1,5 @@
 # Check data-catalog existence
-Cloud function to check the existence of data-catalog files for CKAN packages.
+Function to check the existence of CKAN package's resources on the Google Cloud Platform.
 
 ## Setup
 1. Make sure a ```config.py``` file exists within the directory with the correct configuration:
@@ -11,7 +11,8 @@ Cloud function to check the existence of data-catalog files for CKAN packages.
     API_KEY = The CKAN API key to access the database
     CKAN_SITE_URL = The host URL of CKAN
     ~~~
-3. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
+3. Create a custom Google Cloud Platform role and assign this to the delegated service account (see [Permissions](#permissions));
+4. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
 
 ## Function
 The check-catalog-existence works as follows:
@@ -19,11 +20,11 @@ The check-catalog-existence works as follows:
 2. Each package's resources will be checked to make sure the resource is still existing;
 3. If a resource is not existing anymore, the function will raise a notification with the correct information.
 
-## Permission
+## Permissions
 This function depends on a Service Account (hereafter SA) with specific permissions to access project resources. Because the pre-defined roles within the platform doesn't suit our needs, 
 a custom role has to be defined and assigned to the SA. To create a custom role within GCP you can follow [this guide](https://cloud.google.com/iam/docs/creating-custom-roles). 
 The custom role must have the following permissions:
-- `bigquery.datasets.get`: Listing all BigQuery databases in a project
+- `bigquery.datasets.get`: Getting all BigQuery databases in a project
 - `cloudsql.databases.list`: Listing all Cloud SQL instance databases in a project
 - `cloudsql.instances.list`: Listing all Cloud SQL instances in a project
 - `pubsub.subscriptions.list`: Listing all Pub/Sub subscriptions in a project
@@ -31,7 +32,7 @@ The custom role must have the following permissions:
 - `serviceusage.services.list`: Listing all enabled services in a project
 - `storage.buckets.list`: Listing all buckets within a project
 
-After creating this role, assign it to the delegated SA on the highest level possible.
+After creating this role, assign it to the delegated SA on the highest hierarchy level possible.
 
 ## License
 This function is licensed under the [GPL-3](https://www.gnu.org/licenses/gpl-3.0.en.html) License
