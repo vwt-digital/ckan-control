@@ -217,7 +217,7 @@ class ResourceNotFound(Exception):
 def check_catalog_existence(request):
     logging.info("Initialized function")
 
-    if 'CKAN_API_KEY' in os.environ and 'CKAN_SITE_URL' in os.environ:
+    if 'CKAN_API_KEY' in os.environ and 'CKAN_SITE_URL' in os.environ and hasattr(config, 'DELEGATED_SA'):
         CKANProcessor().process()
     else:
         logging.error('Function has insufficient configuration')
