@@ -15,12 +15,14 @@ class CKANProcessor(object):
     def process(self, payload):
         selector_data = payload[os.environ.get('DATA_SELECTOR', 'Required parameter is missing')]
         future_repo_list = []
-        is_repo_project = True if hasattr(config, 'DAT_REPO_PROJECT') and \
-                                  selector_data.get('projectId', None) == config.DAT_REPO_PROJECT else False
+        is_repo_project = True if \
+            hasattr(config, 'DAT_REPO_PROJECT') and \
+            selector_data.get('projectId', None) == config.DAT_REPO_PROJECT else False
+
+        group = self.get_project_group(selector_data)
+        tag_dict = self.create_tag_dict(selector_data)
 
         if len(selector_data.get('dataset', [])) > 0:
-            tag_dict = self.create_tag_dict(selector_data)
-
             for data in selector_data['dataset']:
                 # Put the details of the dataset we're going to create into a dict
                 dict_list = [
@@ -43,6 +45,7 @@ class CKANProcessor(object):
                     "project_id": selector_data.get('projectId'),
                     "state": "active",
                     "tags": tag_dict,
+                    "groups": [group],
                     "extras": dict_list
                 }
                 # name is used for url and cannot have uppercase or spaces so we have to replace those
@@ -92,6 +95,21 @@ class CKANProcessor(object):
             logging.info(f"Deleting {len(packages_to_delete)} non-existing repo packages")
             for package_name in packages_to_delete:
                 self.purge_dataset(package_name)
+
+    def get_project_group(self, catalog):
+        group = None
+
+        if 'projectId' in catalog:
+            project_id = catalog['projectId']
+            try:
+                group = self.host.action.group_show(id=project_id)
+            except NotFound:  # Group does not exists
+                logging.info(f"Creating new group '{project_id}'")
+                group = self.host.action.group_create(name=project_id)
+            except Exception:
+                raise
+
+        return group
 
     def create_tag_dict(self, catalog):
         tag_dict = []
