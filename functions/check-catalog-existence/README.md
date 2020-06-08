@@ -5,11 +5,18 @@ Function to check the existence of CKAN package's resources on the Google Cloud 
 1. Make sure a ```config.py``` file exists within the directory with the correct configuration:
     ~~~
     DELEGATED_SA = The GCP Service Account with all necessary rights to check resources
+    JIRA_ACTIVE = Boolean to enabled or disable creating JIRA issues for non-existing issues
+    JIRA_USER = User account for JIRA API
+    JIRA_API_URL = URL towards JIRA API v3
+    JIRA_PROJECT_ID = JIRA project ID for to-be-created issues
+    JIRA_ISSUE_TYPE_ID = JIRA issue type ID for to-be-created issues
+    JIRA_EPIC = Epic name for to-be-created issues
     ~~~
 2. Make sure the following variables are present in the environment:
     ~~~
-    API_KEY = The CKAN API key to access the database
+    CKAN_API_KEY = The CKAN API key to access the database
     CKAN_SITE_URL = The host URL of CKAN
+    JIRA_API_KEY = The JIRA API key to create issues for non-existing resources
     ~~~
 3. Create a custom Google Cloud Platform role and assign this to the delegated service account (see [Permissions](#permissions));
 4. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.

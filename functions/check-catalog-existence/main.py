@@ -6,8 +6,10 @@ import pytz
 import datetime
 import requests
 import json
+import sys
 import googleapiclient.discovery
 
+from requests.auth import HTTPBasicAuth
 from google.auth import iam
 from google.auth.transport import requests as gcp_requests
 from google.oauth2 import service_account
@@ -62,13 +64,16 @@ class CKANProcessor(object):
                         if project_id not in self.project_services:
                             self.project_services[project_id] = self.get_project_services(project_id)
 
-                        self.Package(
+                        not_found_resources = self.Package(
                             package=package,
                             stg_client=self.stg_client,
                             bq_client=self.bq_client,
                             ps_client=self.ps_client,
                             sql_client=self.sql_client,
                             project_services=self.project_services.get(project_id, [])).process()
+
+                        if not_found_resources:
+                            create_jira_issues(not_found_resources)
                     else:
                         logging.debug(f"No Project ID specified for package '{package_name}'")
 
@@ -87,6 +92,8 @@ class CKANProcessor(object):
             self.bq_client = bq_client
             self.ps_client = ps_client
             self.sql_client = sql_client
+
+            self.not_found_resources = []
 
         def process(self):
             if self.package.get('resources', None):
@@ -111,12 +118,14 @@ class CKANProcessor(object):
                                 logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
                                 continue
                         except ResourceNotFound as e:
-                            logging.error(json.dumps(e.properties))
+                            self.not_found_resources.append(e.properties['error'])
                             continue
                     else:
                         logging.error(f"Resource does not have the correct fields: {resource}")
             else:
                 logging.error(f"Dataset '{self.package_name}' does not have any resources")
+
+            return self.not_found_resources
 
         def check_storage(self, resource):
             try:
@@ -194,6 +203,45 @@ def request_auth_token():
         raise
 
     return creds
+
+
+def create_jira_issues(not_found_resources):
+    for item in ['JIRA_ACTIVE', 'JIRA_USER', 'JIRA_API_URL', 'JIRA_PROJECT_ID', 'JIRA_ISSUE_TYPE_ID', 'JIRA_EPIC']:
+        if not hasattr(config, item):
+            logging.error('Function has insufficient configuration for creating JIRA issues', not_found_resources)
+            sys.exit(1)
+
+    if not hasattr(os.environ, 'JIRA_API_KEY'):
+        logging.error('Function has insufficient environment variables for creating JIRA issues', not_found_resources)
+        sys.exit(1)
+
+    headers = {"content-type": "application/json"}
+    auth = HTTPBasicAuth(config.JIRA_USER, os.environ['JIRA_API_KEY'])
+    issues_to_create = []
+
+    for resource in not_found_resources:
+        issues_to_create.append({
+            "fields": {
+                "project": {"id": config.JIRA_PROJECT_ID},
+                "issuetype": {"id": config.JIRA_ISSUE_TYPE_ID},
+                "customfield_10014": config.JIRA_EPIC,
+                "summary": "CKAN resource not found: '{}'".format(resource['resource_name']),
+                "description": (
+                    "The resource `{}/{}/{}` could not be identified by the automated "
+                    "data-catalog existence check. Please check the existence of the resource "
+                    "within GCP, or remove the dataset resource from the data-catalog.".format(
+                        resource['project_id'], resource['package_name'], resource['resource_name']))
+            }
+        })
+
+        payload = {"issueUpdates": issues_to_create}
+        response = requests.post(f"{config.JIRA_API_URL}/issue/bulk", headers=headers, auth=auth,
+                                 data=json.dumps(payload))
+
+        if response.ok:
+            logging.info(f"Created {len(issues_to_create)} issues within Epic '{config.JIRA_EPIC}'")
+        else:
+            logging.error(f"Creating JIRA issues returned status code '{response.status_code}'", not_found_resources)
 
 
 class ResourceNotFound(Exception):
