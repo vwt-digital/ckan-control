@@ -81,15 +81,16 @@ class CKANProcessor(object):
             logging.info("JSON request does not contain a dataset")
 
         # Deleting resources existing in CKAN but not in data-catalog based on Project ID
-        current_packages_list = []
-        for package in self.host.action.group_package_show(id=group['name']):
-            if package['project_id'] == group['name']:
-                current_packages_list.append(package['name'])
+        if 'projectId' in selector_data:
+            current_packages_list = []
+            for package in self.host.action.group_package_show(id=group['name']):
+                if package['project_id'] == group['name']:
+                    current_packages_list.append(package['name'])
 
-        packages_to_delete = list(set(current_packages_list).difference(future_packages_list))
-        logging.info(f"Deleting {len(packages_to_delete)} non-existing group-packages")
-        for package_name in packages_to_delete:
-            self.purge_dataset(package_name)
+            packages_to_delete = list(set(current_packages_list).difference(future_packages_list))
+            logging.info(f"Deleting {len(packages_to_delete)} non-existing group-packages")
+            for package_name in packages_to_delete:
+                self.purge_dataset(package_name)
 
     def get_project_group(self, catalog):
         group = None
