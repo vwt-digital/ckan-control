@@ -5,7 +5,6 @@ This function consumes data-catalogs posted on a Pub/Sub Topic and adds them to 
 1. Make sure a ```config.py``` file exists within the directory, based on the [config.example.py](config.example.py), with the correct configuration:
     ~~~
     DATA_CATALOG_PROPERTIES = Identifiers for the data-catalog routes
-    DAT_REPO_PROJECT = Project ID that contains all repositories to match and delete non-existing repositories
     ~~~
 2. Make sure the following variables are present in the environment:
     ~~~

@@ -14,10 +14,7 @@ class CKANProcessor(object):
 
     def process(self, payload):
         selector_data = payload[os.environ.get('DATA_SELECTOR', 'Required parameter is missing')]
-        future_repo_list = []
-        is_repo_project = True if \
-            hasattr(config, 'DAT_REPO_PROJECT') and \
-            selector_data.get('projectId', None) == config.DAT_REPO_PROJECT else False
+        future_packages_list = []
 
         group = self.get_project_group(selector_data)
         tag_dict = self.create_tag_dict(selector_data)
@@ -50,9 +47,7 @@ class CKANProcessor(object):
                 }
                 # name is used for url and cannot have uppercase or spaces so we have to replace those
                 data_dict["name"] = data_dict["name"].replace("/", "_").replace(".", "-").lower()
-
-                if is_repo_project:
-                    future_repo_list.append(data_dict['name'])
+                future_packages_list.append(data_dict['name'])
 
                 # Create list with future resources
                 future_resources_list = {}
@@ -85,16 +80,16 @@ class CKANProcessor(object):
         else:
             logging.info("JSON request does not contain a dataset")
 
-        if is_repo_project:
-            current_repo_list = []
-            for key in self.host.action.package_list():
-                if 'vwt_dat_repo' in key:
-                    current_repo_list.append(key)
+        # Deleting resources existing in CKAN but not in data-catalog based on Project ID
+        current_packages_list = []
+        for package in self.host.action.group_package_show(id=group['name']):
+            if package['project_id'] == group['name']:
+                current_packages_list.append(package['name'])
 
-            packages_to_delete = list(set(current_repo_list).difference(future_repo_list))
-            logging.info(f"Deleting {len(packages_to_delete)} non-existing repo packages")
-            for package_name in packages_to_delete:
-                self.purge_dataset(package_name)
+        packages_to_delete = list(set(current_packages_list).difference(future_packages_list))
+        logging.info(f"Deleting {len(packages_to_delete)} non-existing group-packages")
+        for package_name in packages_to_delete:
+            self.purge_dataset(package_name)
 
     def get_project_group(self, catalog):
         group = None
@@ -155,7 +150,7 @@ class CKANProcessor(object):
         return current_resources_list
 
     def purge_dataset(self, package_name):
-        logging.info(f"Purging dataset '{package_name}'")
+        logging.info(f"Purging dataset '{package_name}' and it's resources")
 
         try:
             package = self.host.action.package_show(id=package_name)  # Retrieve package

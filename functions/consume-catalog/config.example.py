@@ -3,5 +3,3 @@ DATA_CATALOG_PROPERTIES = {
         "entity_name": "data_catalogs"
     }
 }
-
-DAT_REPO_PROJECT = "project-id"
