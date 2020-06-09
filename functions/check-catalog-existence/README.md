@@ -7,9 +7,10 @@ Function to check the existence of CKAN package's resources on the Google Cloud 
     DELEGATED_SA = The GCP Service Account with all necessary rights to check resources
     JIRA_ACTIVE = Boolean to enabled or disable creating JIRA issues for non-existing issues
     JIRA_USER = User account for JIRA API
-    JIRA_API_URL = URL towards JIRA API v3
+    JIRA_API_DOMAIN = URL towards JIRA domain
     JIRA_PROJECT_ID = JIRA project ID for to-be-created issues
     JIRA_ISSUE_TYPE_ID = JIRA issue type ID for to-be-created issues
+    JIRA_BOARD_ID = JIRA board ID for retrieving current sprint for to-be-created issues
     JIRA_EPIC = Epic name for to-be-created issues
     ~~~
 2. Make sure the following variables are present in the environment:
