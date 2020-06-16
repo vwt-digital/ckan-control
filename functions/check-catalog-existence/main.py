@@ -7,6 +7,8 @@ import datetime
 import requests
 import json
 import sys
+import signal
+import time
 import googleapiclient.discovery
 
 from requests.auth import HTTPBasicAuth
@@ -49,6 +51,7 @@ class CKANProcessor(object):
                 raise
 
             logging.info(f"Checking data-catalog existence for {len(package_list)} packages")
+            not_found_resources = []
 
             for key in package_list:
                 try:
@@ -64,18 +67,18 @@ class CKANProcessor(object):
                         if project_id not in self.project_services:
                             self.project_services[project_id] = self.get_project_services(project_id)
 
-                        not_found_resources = self.Package(
+                        not_found_resources.extend(self.Package(
                             package=package,
                             stg_client=self.stg_client,
                             bq_client=self.bq_client,
                             ps_client=self.ps_client,
                             sql_client=self.sql_client,
-                            project_services=self.project_services.get(project_id, [])).process()
-
-                        if not_found_resources:
-                            create_jira_issues(not_found_resources)
+                            project_services=self.project_services.get(project_id, [])).process())
                     else:
                         logging.debug(f"No Project ID specified for package '{package_name}'")
+
+            if len(not_found_resources) > 0:
+                create_jira_issues(not_found_resources)
 
     def get_project_services(self, project_id):
         response = self.su_client.services().list(parent=f"projects/{project_id}", filter="state:ENABLED").execute()
@@ -97,8 +100,12 @@ class CKANProcessor(object):
 
         def process(self):
             if self.package.get('resources', None):
+                signal.signal(signal.SIGALRM, alarm_handler)
+
                 for resource in self.package.get('resources', []):
                     if 'format' in resource and 'name' in resource:
+                        signal.alarm(5)
+
                         try:
                             if resource['format'] == 'blob-storage':
                                 self.check_storage(resource)
@@ -120,10 +127,22 @@ class CKANProcessor(object):
                         except ResourceNotFound as e:
                             self.not_found_resources.append(e.properties['error'])
                             continue
+                        except TimeOutException:
+                            logging.info(
+                                f"A timeout occurred when checking resource '{resource['name']}' " +
+                                f"with format '{resource['format']}': the request took more than 5s")
+                            continue
+                        except Exception as e:
+                            logging.info(
+                                f"An exception occurred when checking resource '{resource['name']}' " +
+                                f"with format '{resource['format']}': {str(e)}")
+                            continue
+                        else:
+                            signal.alarm(0)
                     else:
-                        logging.error(f"Resource does not have the correct fields: {resource}")
+                        logging.info(f"Resource does not have the correct fields: {resource}")
             else:
-                logging.error(f"Dataset '{self.package_name}' does not have any resources")
+                logging.info(f"Dataset '{self.package_name}' does not have any resources")
 
             return self.not_found_resources
 
@@ -216,6 +235,11 @@ def create_jira_issues(not_found_resources):
         logging.error('Function has insufficient environment variables for creating JIRA issues')
         sys.exit(1)
 
+    if not config.JIRA_ACTIVE:
+        logging.info(f"JIRA is inactive, processed a total of {len(not_found_resources)} missing resources")
+        logging.info(json.dumps(not_found_resources))
+        sys.exit(0)
+
     headers = {"content-type": "application/json"}
     auth = HTTPBasicAuth(config.JIRA_USER, os.environ['JIRA_API_KEY'])
     issues_to_create = []
@@ -295,6 +319,15 @@ class ResourceNotFound(Exception):
                 "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             }
         }
+
+
+class TimeOutException(Exception):
+    pass
+
+
+def alarm_handler(signum, frame):
+    print("ALARM signal received")
+    raise TimeOutException()
 
 
 def check_catalog_existence(request):
