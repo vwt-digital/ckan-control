@@ -237,7 +237,7 @@ def create_jira_issues(not_found_resources):
     if not config.JIRA_ACTIVE:
         logging.info(f"JIRA is inactive, processed a total of {len(not_found_resources)} missing resources")
         logging.info(json.dumps(not_found_resources))
-        sys.exit(0)
+        return
 
     headers = {"content-type": "application/json"}
     auth = HTTPBasicAuth(config.JIRA_USER, os.environ['JIRA_API_KEY'])
