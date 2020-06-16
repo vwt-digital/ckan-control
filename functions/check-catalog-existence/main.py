@@ -8,7 +8,6 @@ import requests
 import json
 import sys
 import signal
-import time
 import googleapiclient.discovery
 
 from requests.auth import HTTPBasicAuth
@@ -104,7 +103,7 @@ class CKANProcessor(object):
 
                 for resource in self.package.get('resources', []):
                     if 'format' in resource and 'name' in resource:
-                        signal.alarm(5)
+                        signal.alarm(20)
 
                         try:
                             if resource['format'] == 'blob-storage':
@@ -130,7 +129,7 @@ class CKANProcessor(object):
                         except TimeOutException:
                             logging.info(
                                 f"A timeout occurred when checking resource '{resource['name']}' " +
-                                f"with format '{resource['format']}': the request took more than 5s")
+                                f"with format '{resource['format']}': the request took more than 20s")
                             continue
                         except Exception as e:
                             logging.info(
