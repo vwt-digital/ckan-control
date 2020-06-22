@@ -8,6 +8,7 @@ import requests
 import json
 import sys
 import signal
+import re
 import googleapiclient.discovery
 
 from requests.auth import HTTPBasicAuth
@@ -241,65 +242,90 @@ def create_jira_issues(not_found_resources):
 
     headers = {"content-type": "application/json"}
     auth = HTTPBasicAuth(config.JIRA_USER, os.environ['JIRA_API_KEY'])
+    issues_already_existing = {}
     issues_to_create = []
 
+    issues_search_payload = {"jql": (f"project = {config.JIRA_PROJECT_ID} "
+                                     f"AND issuetype = {config.JIRA_ISSUE_TYPE_ID} "
+                                     "AND status in (\"To Do\", \"In Progress\", \"For Review\", Feedback) "
+                                     f"AND \"Epic Link\" = {config.JIRA_EPIC} "
+                                     "AND text ~ \"CKAN resource not found\" "
+                                     "ORDER BY priority DESC"),
+                             "fields": ["summary"]}
+    issues_search_response = requests.post(f"{config.JIRA_API_DOMAIN}/rest/api/3/search", headers=headers, auth=auth,
+                                           data=json.dumps(issues_search_payload))
+
+    if issues_search_response.ok:
+        issues_search_content = json.loads(issues_search_response.content)
+
+        for issue in issues_search_content.get("issues", []):
+            re_match = re.match(r"(?:CKAN resource not found: )(?:')([\w-]+)(?:')", issue['fields']['summary'])
+            if re_match:
+                issues_already_existing[re_match.group(1)] = issue['key']
+
     for resource in not_found_resources:
-        issues_to_create.append({
-            "fields": {
-                "project": {"id": int(config.JIRA_PROJECT_ID)},
-                "issuetype": {"id": int(config.JIRA_ISSUE_TYPE_ID)},
-                "customfield_10014": config.JIRA_EPIC,
-                "summary": "CKAN resource not found: '{}'".format(resource['resource_name']),
-                "description": {
-                    "type": "doc",
-                    "version": 1,
-                    "content": [
-                        {
-                            "type": "paragraph",
-                            "content": [
-                                {
-                                    "text": (
-                                        "The resource `{}/{}/{}` could not be identified by the automated "
-                                        "data-catalog existence check. Please check the existence of the resource "
-                                        "within GCP, or remove the dataset resource from the data-catalog.".format(
-                                            resource['project_id'], resource['package_name'], resource['resource_name'])),
-                                    "type": "text"
-                                }
-                            ]
-                        }
-                    ]
+        if resource['resource_name'] not in issues_already_existing:
+            issues_to_create.append({
+                "fields": {
+                    "project": {"id": int(config.JIRA_PROJECT_ID)},
+                    "issuetype": {"id": int(config.JIRA_ISSUE_TYPE_ID)},
+                    "customfield_10014": config.JIRA_EPIC,
+                    "summary": "CKAN resource not found: '{}'".format(resource['resource_name']),
+                    "description": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "text": (
+                                            "The resource `{}/{}/{}` could not be identified by the automated "
+                                            "data-catalog existence check. Please check the existence of the resource "
+                                            "within GCP, or remove the dataset resource from the data-catalog.".format(
+                                                resource['project_id'], resource['package_name'], resource['resource_name'])),
+                                        "type": "text"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
                 }
-            }
-        })
-
-    issues_payload = {"issueUpdates": issues_to_create}
-    issues_response = requests.post(f"{config.JIRA_API_DOMAIN}/rest/api/3/issue/bulk", headers=headers, auth=auth,
-                                    data=json.dumps(issues_payload))
-
-    if issues_response.ok:
-        logging.info(f"Created {len(issues_to_create)} issues within Epic '{config.JIRA_EPIC}'")
-        issues_content = json.loads(issues_response.content)
-        new_issues = [issue['id'] for issue in issues_content['issues']]
-
-        sprint_response = requests.get(f"{config.JIRA_API_DOMAIN}/rest/agile/1.0/board/{config.JIRA_BOARD_ID}/sprint",
-                                       headers=headers, auth=auth, params={'state': 'active', 'maxResults': 1})
-
-        if sprint_response.ok:
-            sprint_obj = json.loads(sprint_response.content)
-            sprint_id = sprint_obj['values'][0]['id'] if len(sprint_obj['values']) > 0 else None
-
-            sprint_payload = {"issues": new_issues}
-            sprint_move_response = requests.post(f"{config.JIRA_API_DOMAIN}/rest/agile/1.0/sprint/{sprint_id}/issue",
-                                                 headers=headers, auth=auth, data=json.dumps(sprint_payload))
-
-            if sprint_move_response.ok:
-                logging.info(f"Moved {len(new_issues)} issues to Sprint '{sprint_id}'")
-            else:
-                logging.error(f"Moving new JIRA issues '{','.join(new_issues)}' returned status code '{sprint_move_response.status_code}'")
+            })
         else:
-            logging.error(f"Retrieving current JIRA sprint returned status code '{sprint_response.status_code}'")
-    else:
-        logging.error(f"Creating JIRA issues returned status code '{issues_response.status_code}'")
+            logging.info(
+                f"JIRA ticket for issue '{resource['resource_name']}' does already " +
+                f"exist: '{issues_already_existing[resource['resource_name']]}'")
+    if len(issues_to_create) > 0:
+        issues_payload = {"issueUpdates": issues_to_create}
+        issues_response = requests.post(f"{config.JIRA_API_DOMAIN}/rest/api/3/issue/bulk", headers=headers, auth=auth,
+                                        data=json.dumps(issues_payload))
+
+        if issues_response.ok:
+            logging.info(f"Created {len(issues_to_create)} issues within Epic '{config.JIRA_EPIC}'")
+            issues_content = json.loads(issues_response.content)
+            new_issues = [issue['id'] for issue in issues_content['issues']]
+
+            sprint_response = requests.get(f"{config.JIRA_API_DOMAIN}/rest/agile/1.0/board/{config.JIRA_BOARD_ID}/sprint",
+                                           headers=headers, auth=auth, params={'state': 'active', 'maxResults': 1})
+
+            if sprint_response.ok:
+                sprint_obj = json.loads(sprint_response.content)
+                sprint_id = sprint_obj['values'][0]['id'] if len(sprint_obj['values']) > 0 else None
+
+                sprint_payload = {"issues": new_issues}
+                sprint_move_response = requests.post(f"{config.JIRA_API_DOMAIN}/rest/agile/1.0/sprint/{sprint_id}/issue",
+                                                     headers=headers, auth=auth, data=json.dumps(sprint_payload))
+
+                if sprint_move_response.ok:
+                    logging.info(f"Moved {len(new_issues)} issues to Sprint '{sprint_id}'")
+                else:
+                    logging.error(f"Moving new JIRA issues '{','.join(new_issues)}' returned status " +
+                                  f"code '{sprint_move_response.status_code}'")
+            else:
+                logging.error(f"Retrieving current JIRA sprint returned status code '{sprint_response.status_code}'")
+        else:
+            logging.error(f"Creating JIRA issues returned status code '{issues_response.status_code}'")
 
 
 class ResourceNotFound(Exception):
