@@ -225,26 +225,31 @@ def request_auth_token():
 
 
 def create_jira_issues(not_found_resources):
+    # Checking for JIRA attributes in configuration file
     for item in ['JIRA_ACTIVE', 'JIRA_USER', 'JIRA_API_DOMAIN', 'JIRA_PROJECT_ID', 'JIRA_ISSUE_TYPE_ID',
                  'JIRA_BOARD_ID', 'JIRA_EPIC']:
         if not hasattr(config, item):
             logging.error('Function has insufficient configuration for creating JIRA issues')
             sys.exit(1)
 
+    # Checking for the JIRA API key
     if 'JIRA_API_KEY' not in os.environ:
         logging.error('Function has insufficient environment variables for creating JIRA issues')
         sys.exit(1)
 
+    # Check if JIRA functionality is active
     if not config.JIRA_ACTIVE:
         logging.info(f"JIRA is inactive, processed a total of {len(not_found_resources)} missing resources")
         logging.info(json.dumps(not_found_resources))
         return
 
+    # Setup JIRA request variables
     headers = {"content-type": "application/json"}
     auth = HTTPBasicAuth(config.JIRA_USER, os.environ['JIRA_API_KEY'])
     issues_already_existing = {}
     issues_to_create = []
 
+    # Search for already existing JIRA tickets with format "CKAN resource not found: '<dataset_name>'"
     issues_search_payload = {"jql": (f"project = {config.JIRA_PROJECT_ID} "
                                      f"AND issuetype = {config.JIRA_ISSUE_TYPE_ID} "
                                      "AND status in (\"To Do\", \"In Progress\", \"For Review\", Feedback) "
@@ -263,6 +268,7 @@ def create_jira_issues(not_found_resources):
             if re_match:
                 issues_already_existing[re_match.group(1)] = issue['key']
 
+    # Create JIRA issue objects for non-existing packages that don't have a JIRA ticket already
     for resource in not_found_resources:
         if resource['resource_name'] not in issues_already_existing:
             issues_to_create.append({
@@ -296,11 +302,14 @@ def create_jira_issues(not_found_resources):
             logging.info(
                 f"JIRA ticket for issue '{resource['resource_name']}' does already " +
                 f"exist: '{issues_already_existing[resource['resource_name']]}'")
+
+    # Post the non-existing packages to JIRA as issues
     if len(issues_to_create) > 0:
         issues_payload = {"issueUpdates": issues_to_create}
         issues_response = requests.post(f"{config.JIRA_API_DOMAIN}/rest/api/3/issue/bulk", headers=headers, auth=auth,
                                         data=json.dumps(issues_payload))
 
+        # Get the current active JIRA spring
         if issues_response.ok:
             logging.info(f"Created {len(issues_to_create)} issues within Epic '{config.JIRA_EPIC}'")
             issues_content = json.loads(issues_response.content)
@@ -309,6 +318,7 @@ def create_jira_issues(not_found_resources):
             sprint_response = requests.get(f"{config.JIRA_API_DOMAIN}/rest/agile/1.0/board/{config.JIRA_BOARD_ID}/sprint",
                                            headers=headers, auth=auth, params={'state': 'active', 'maxResults': 1})
 
+            # Move all created issues towards the current JIRA spring
             if sprint_response.ok:
                 sprint_obj = json.loads(sprint_response.content)
                 sprint_id = sprint_obj['values'][0]['id'] if len(sprint_obj['values']) > 0 else None
