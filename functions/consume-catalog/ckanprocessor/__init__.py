@@ -13,7 +13,7 @@ class CKANProcessor(object):
         self.ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
         self.session = requests.Session()
         self.session.verify = False
-        self.host = RemoteCKAN(self.ckan_host, apikey=self.api_key, session=session)
+        self.host = RemoteCKAN(self.ckan_host, apikey=self.api_key, session=self.session)
 
     def process(self, payload):
         selector_data = payload[os.environ.get('DATA_SELECTOR', 'Required parameter is missing')]
