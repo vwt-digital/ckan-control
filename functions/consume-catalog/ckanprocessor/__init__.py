@@ -2,6 +2,8 @@ import config
 import os
 import logging
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from ckanapi import RemoteCKAN, ValidationError, NotFound, SearchError
 
