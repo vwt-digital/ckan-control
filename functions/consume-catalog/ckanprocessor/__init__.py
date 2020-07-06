@@ -1,6 +1,9 @@
 import config
 import os
 import logging
+import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from ckanapi import RemoteCKAN, ValidationError, NotFound, SearchError
 
@@ -10,7 +13,9 @@ class CKANProcessor(object):
         self.meta = config.DATA_CATALOG_PROPERTIES[os.environ.get('DATA_SELECTOR', 'Required parameter is missing')]
         self.api_key = os.environ.get('API_KEY', 'Required parameter is missing')
         self.ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
-        self.host = RemoteCKAN(self.ckan_host, apikey=self.api_key)
+        self.session = requests.Session()
+        self.session.verify = False
+        self.host = RemoteCKAN(self.ckan_host, apikey=self.api_key, session=self.session)
 
     def process(self, payload):
         selector_data = payload[os.environ.get('DATA_SELECTOR', 'Required parameter is missing')]
