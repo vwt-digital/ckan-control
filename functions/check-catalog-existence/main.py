@@ -18,6 +18,8 @@ from google.oauth2 import service_account
 from google.cloud import storage, bigquery, exceptions as gcp_exceptions
 
 from ckanapi import RemoteCKAN, NotFound
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 TOKEN_URI = 'https://accounts.google.com/o/oauth2/token'  # nosec
 logging.basicConfig(level=logging.INFO)
