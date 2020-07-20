@@ -3,9 +3,10 @@ import os
 import logging
 import requests
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from ckanapi import RemoteCKAN, ValidationError, NotFound, SearchError
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class CKANProcessor(object):
@@ -88,7 +89,7 @@ class CKANProcessor(object):
         # Deleting resources existing in CKAN but not in data-catalog based on Project ID
         if 'projectId' in selector_data:
             current_packages_list = []
-            for package in self.host.action.group_package_show(id=group['name']):
+            for package in self.host.action.group_show(id=group['id'], include_datasets=True).get('packages', []):
                 if package['project_id'] == group['name']:
                     current_packages_list.append(package['name'])
 

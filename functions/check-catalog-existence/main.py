@@ -18,6 +18,8 @@ from google.oauth2 import service_account
 from google.cloud import storage, bigquery, exceptions as gcp_exceptions
 
 from ckanapi import RemoteCKAN, NotFound
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 TOKEN_URI = 'https://accounts.google.com/o/oauth2/token'  # nosec
 logging.basicConfig(level=logging.INFO)
@@ -25,7 +27,9 @@ logging.basicConfig(level=logging.INFO)
 
 class CKANProcessor(object):
     def __init__(self):
-        self.host = RemoteCKAN(os.environ.get('CKAN_SITE_URL'), apikey=os.environ.get('CKAN_API_KEY'))
+        self.session = requests.Session()
+        self.session.verify = False
+        self.host = RemoteCKAN(os.environ.get('CKAN_SITE_URL'), apikey=os.environ.get('CKAN_API_KEY'), session=self.session)
 
         self.credentials = request_auth_token()
         self.stg_client = storage.Client(credentials=self.credentials)
@@ -40,11 +44,9 @@ class CKANProcessor(object):
         self.project_services = {}
 
     def process(self):
-        try:
-            self.host.action.site_read()
-        except Exception:
-            logging.error('CKAN not reachable')
-        else:
+        ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
+        status = requests.head(ckan_host, verify=False).status_code
+        if status == 200:
             try:
                 package_list = self.host.action.package_list()
             except Exception:
@@ -79,6 +81,8 @@ class CKANProcessor(object):
 
             if len(not_found_resources) > 0:
                 create_jira_issues(not_found_resources)
+        else:
+            logging.error('CKAN not reachable')
 
     def get_project_services(self, project_id):
         response = self.su_client.services().list(parent=f"projects/{project_id}", filter="state:ENABLED").execute()
