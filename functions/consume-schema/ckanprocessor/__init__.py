@@ -27,7 +27,8 @@ class CKANProcessor(object):
         self.schema_to_ckan(selector_data)
 
     def schema_to_ckan(self, schema):
-        schema_json = json.loads(schema)
+        schema_json = json.dumps(schema)
+        schema_json = json.loads(schema_json)
 
         schema_list = [schema]
 
