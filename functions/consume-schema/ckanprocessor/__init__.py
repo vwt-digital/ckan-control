@@ -57,23 +57,24 @@ class CKANProcessor(object):
     def patch_resource(self, resource, schema_list):
         not_add_again = []
         # Loop through schema list and check if a schema is already in the resource
-        current_schema_list = resource['schemas']
-        current_schema_list = ast.literal_eval(current_schema_list)
-        for schema in schema_list:
-            schema = json.loads(schema)
+        if 'schemas' in resource:
+            current_schema_list = resource['schemas']
+            current_schema_list = ast.literal_eval(current_schema_list)
+            for schema in schema_list:
+                schema = json.loads(schema)
+                for cs in current_schema_list:
+                    cs = json.loads(cs)
+                    if '$id' in cs:
+                        cs_urn = cs['$id']
+                        if cs_urn == schema['$id']:
+                            not_add_again.append(cs_urn)
+            # If it is, do not add it double to the resource
             for cs in current_schema_list:
                 cs = json.loads(cs)
                 if '$id' in cs:
                     cs_urn = cs['$id']
-                    if cs_urn == schema['$id']:
-                        not_add_again.append(cs_urn)
-        # If it is, do not add it double to the resource
-        for cs in current_schema_list:
-            cs = json.loads(cs)
-            if '$id' in cs:
-                cs_urn = cs['$id']
-                if cs_urn not in not_add_again:
-                    schema_list.append(cs)
+                    if cs_urn not in not_add_again:
+                        schema_list.append(cs)
         # Now patch the resource and give it the new schema
         try:
             resource_dict = {
