@@ -10,8 +10,7 @@ parser = CKANProcessor()
 logging.basicConfig(level=logging.INFO)
 
 
-# First json to postgis, then postgis to database
-def json_to_ckan(request):
+def schema_to_ckan(request):
     # Extract data from request
     envelope = json.loads(request.data.decode('utf-8'))
     payload = base64.b64decode(envelope['message']['data'])

@@ -1,0 +1,5 @@
+SCHEMA_PROPERTIES = {
+    "schema": {
+        "entity_name": "schemas"
+    }
+}
