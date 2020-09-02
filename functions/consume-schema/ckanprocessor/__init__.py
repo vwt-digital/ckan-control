@@ -30,6 +30,11 @@ class CKANProcessor(object):
         schema_json = json.dumps(schema)
         schema_json = json.loads(schema_json)
 
+        logging.info("schema:")
+        logging.info(schema)
+        logging.info("schema_json:")
+        logging.info(schema_json)
+
         schema_list = [schema]
 
         # If the schema has an id
@@ -76,6 +81,8 @@ class CKANProcessor(object):
                     if cs_urn not in not_add_again:
                         schema_list.append(cs)
         # Now patch the resource and give it the new schema
+        logging.info("schema_list:")
+        logging.info(schema_list)
         try:
             resource_dict = {
                 'id': resource['id'],
