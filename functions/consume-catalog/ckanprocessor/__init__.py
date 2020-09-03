@@ -67,7 +67,7 @@ class CKANProcessor(object):
                             "name": resource['title'],
                             "format": resource['format'],
                             "mediaType": resource.get('mediaType', ''),
-                            "schema_urns": resource.get('describedBy', '')
+                            "schema_urn": resource.get('describedBy', '')
                         }
                     else:
                         resource_dict = {

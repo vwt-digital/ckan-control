@@ -23,7 +23,7 @@ steps:
           echo '{
               "bindings": [ {
                   "members":
-                    [ "serviceAccount:DATA-CATALOG-TOPIC-SA@appspot.gserviceaccount.com" ],
+                    [ "serviceAccount:DATA-CATALOG-TOPIC-SA-DEVELOPMENT@appspot.gserviceaccount.com" ],
                     "role": "roles/cloudfunctions.invoker"
                 } ]
               }' \
@@ -33,7 +33,7 @@ steps:
           echo '{
               "bindings": [ {
                  "members":
-                    [ "serviceAccount:DATA-CATALOG-TOPIC-SA@appspot.gserviceaccount.com" ],
+                    [ "serviceAccount:DATA-CATALOG-TOPIC-SA-PRODUCTION@appspot.gserviceaccount.com" ],
                     "role": "roles/cloudfunctions.invoker"
                 } ]
               }' \
