@@ -28,12 +28,14 @@ class CKANProcessor(object):
         # If the schema has an id
         if '$id' in schema:
             urn_schema = schema['$id']
+            logging.info(f'urn schema: {urn_schema}')
             # Get all resources on CKAN that are a topic
             resources = self.host.action.resource_search(query="format:topic")
             resources = resources['results']
             for resource in resources:
                 # If the resource has a key 'schema_urn'
                 if 'schema_urn' in resource:
+                    logging.info(f'resource with schema urn: {resource}')
                     schema_urn_resource = resource['schema_urn']
                     # If the urn of the processed schema coming from the topic
                     # is the same as one of the resources
