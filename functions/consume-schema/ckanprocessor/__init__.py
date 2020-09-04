@@ -57,7 +57,7 @@ class CKANProcessor(object):
                 'package_id': resource['package_id'],
                 'name': resource['name'],
                 'url': resource['url'],
-                'schema': str(schema)
+                'schema': schema
             }
             self.host.action.resource_patch(**resource_dict)
             logging.info(f"Resource dict: {resource_dict}")
