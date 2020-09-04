@@ -42,6 +42,8 @@ class CKANProcessor(object):
                     if schema_urn_resource == urn_schema:
                         logging.info("This resource has the same schema urn as the id of the schema message:")
                         logging.info(resource)
+                        logging.info("this schema is uploaded:")
+                        logging.info(schema)
                         # Give that resource a schema
                         self.patch_resource(resource, schema)
         else:
