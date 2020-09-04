@@ -60,6 +60,8 @@ class CKANProcessor(object):
                 'schema': str(schema)
             }
             self.host.action.resource_patch(**resource_dict)
+            logging.info(f"Resource dict: {resource_dict}")
+            logging.info(f"Schema: {str(schema)}")
             logging.info(f"Added schema to resource '{resource['name']}'")
         except NotFound:  # Resource does not exist
             logging.info(f"Resource '{resource['name']}' does not exist")
