@@ -4,7 +4,7 @@ This function consumes data-catalogs posted on a Pub/Sub Topic and adds them to 
 ## Setup
 1. Make sure a ```config.py``` file exists within the directory, based on the [config.example.py](config.example.py), with the correct configuration:
     ~~~
-    DATA_CATALOG_PROPERTIES = Identifiers for the data-catalog routes
+    SCHEMA_PROPERTIES = Identifiers for the schema routes
     ~~~
 2. Make sure the following variables are present in the environment:
     ~~~
@@ -19,15 +19,7 @@ To make sure the function works according to the way it was intented, the incomi
 ~~~JSON
 {
   "gobits": [ ],
-  "data_catalog": {
-    "conformsTo": "https://vwt-digital.github.io/project-company-data.github.io/v1.1/schema",
-    "projectId": "project-id",
-    "backupDestination": "backup-destination",
-    "publishDataCatalog": {
-      "topic": "data-catalogs-topic",
-      "project": "data-catalogs-project"
-    },
-    "dataset": [ ]
+  "schema": {
   }
 }
 ~~~

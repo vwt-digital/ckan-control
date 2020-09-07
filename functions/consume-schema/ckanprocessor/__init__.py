@@ -28,22 +28,16 @@ class CKANProcessor(object):
         # If the schema has an id
         if '$id' in schema:
             urn_schema = schema['$id']
-            logging.info(f'urn schema: {urn_schema}')
             # Get all resources on CKAN that are a topic
             resources = self.host.action.resource_search(query="format:topic")
             resources = resources['results']
             for resource in resources:
                 # If the resource has a key 'schema_urn'
                 if 'schema_urn' in resource:
-                    logging.info(f'resource with schema urn: {resource}')
                     schema_urn_resource = resource['schema_urn']
                     # If the urn of the processed schema coming from the topic
                     # is the same as one of the resources
                     if schema_urn_resource == urn_schema:
-                        logging.info("This resource has the same schema urn as the id of the schema message:")
-                        logging.info(resource)
-                        logging.info("this schema is uploaded:")
-                        logging.info(schema)
                         # Give that resource a schema
                         self.patch_resource(resource, schema)
         else:
@@ -62,8 +56,6 @@ class CKANProcessor(object):
                 'schema': schema
             }
             self.host.action.resource_patch(**resource_dict)
-            logging.info(f"Resource dict: {resource_dict}")
-            logging.info(f"Schema: {str(schema)}")
             logging.info(f"Added schema to resource '{resource['name']}'")
         except NotFound:  # Resource does not exist
             logging.info(f"Resource '{resource['name']}' does not exist")
