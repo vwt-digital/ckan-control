@@ -1,0 +1,45 @@
+---
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        _API_KEY=""
+        _CKAN_DOMAIN=""
+        gcloud functions deploy ${PROJECT_ID}-consume-schematockan-func \
+          --entry-point=schema_to_ckan \
+          --runtime=python37 \
+          --trigger-http \
+          --project=${PROJECT_ID} \
+          --region=europe-west1 \
+          --max-instances=1 \
+          --timeout=540 \
+          --set-env-vars=DATA_SELECTOR=schema \
+          --set-env-vars=API_KEY=$${_API_KEY} \
+          --set-env-vars=CKAN_SITE_URL="https://$${_CKAN_DOMAIN}" \
+          --set-env-vars=STATUS=inactive
+        if [[ "${BRANCH_NAME}" == "develop" ]]; then
+          echo '{
+              "bindings": [ {
+                  "members":
+                    [ "serviceAccount:DATA-CATALOG-TOPIC-SA-DEVELOPMENT@appspot.gserviceaccount.com" ],
+                    "role": "roles/cloudfunctions.invoker"
+                } ]
+              }' \
+            > consume_func_permissions.json
+        fi
+        if [[ "${BRANCH_NAME}" == "master" ]]; then
+          echo '{
+              "bindings": [ {
+                 "members":
+                    [ "serviceAccount:DATA-CATALOG-TOPIC-SA-PRODUCTION@appspot.gserviceaccount.com" ],
+                    "role": "roles/cloudfunctions.invoker"
+                } ]
+              }' \
+            > consume_func_permissions.json
+        fi
+        gcloud beta functions set-iam-policy ${PROJECT_ID}-consume-schematockan-func \
+          --region=europe-west1 \
+          --project=${PROJECT_ID} consume_func_permissions.json
+    dir: 'functions/consume-catalog'

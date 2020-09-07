@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 class CKANProcessor(object):
     def __init__(self):
         self.session = requests.Session()
-        self.session.verify = False
+        self.session.verify = True
         self.host = RemoteCKAN(os.environ.get('CKAN_SITE_URL'), apikey=os.environ.get('CKAN_API_KEY'), session=self.session)
 
         self.credentials = request_auth_token()
@@ -45,7 +45,7 @@ class CKANProcessor(object):
 
     def process(self):
         ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
-        status = requests.head(ckan_host, verify=False).status_code
+        status = requests.head(ckan_host, verify=True).status_code
         if status == 200:
             try:
                 package_list = self.host.action.package_list()

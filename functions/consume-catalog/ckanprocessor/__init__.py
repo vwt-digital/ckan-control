@@ -15,7 +15,7 @@ class CKANProcessor(object):
         self.api_key = os.environ.get('API_KEY', 'Required parameter is missing')
         self.ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
         self.session = requests.Session()
-        self.session.verify = False
+        self.session.verify = True
         self.host = RemoteCKAN(self.ckan_host, apikey=self.api_key, session=self.session)
 
     def process(self, payload):
@@ -58,14 +58,26 @@ class CKANProcessor(object):
                 # Create list with future resources
                 future_resources_list = {}
                 for resource in data['distribution']:
-                    resource_dict = {
-                        "package_id": data_dict["name"],
-                        "url": resource['accessURL'],
-                        "description": resource.get('description', ''),
-                        "name": resource['title'],
-                        "format": resource['format'],
-                        "mediaType": resource.get('mediaType', '')
-                    }
+                    # Check if resource has a "describedBy" because then it has a schema
+                    if 'describedBy' in resource:
+                        resource_dict = {
+                            "package_id": data_dict["name"],
+                            "url": resource['accessURL'],
+                            "description": resource.get('description', ''),
+                            "name": resource['title'],
+                            "format": resource['format'],
+                            "mediaType": resource.get('mediaType', ''),
+                            "schema_urn": resource.get('describedBy', '')
+                        }
+                    else:
+                        resource_dict = {
+                            "package_id": data_dict["name"],
+                            "url": resource['accessURL'],
+                            "description": resource.get('description', ''),
+                            "name": resource['title'],
+                            "format": resource['format'],
+                            "mediaType": resource.get('mediaType', '')
+                        }
                     if resource['title'] not in future_resources_list:
                         future_resources_list[resource['title']] = resource_dict
                     else:
