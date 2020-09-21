@@ -85,8 +85,12 @@ class CKANProcessor(object):
             logging.error('CKAN not reachable')
 
     def get_project_services(self, project_id):
-        response = self.su_client.services().list(parent=f"projects/{project_id}", filter="state:ENABLED").execute()
-        return [service.get('config').get('name') for service in response.get('services', [])]
+        try:
+            response = self.su_client.services().list(parent=f"projects/{project_id}", filter="state:ENABLED").execute()
+            return [service.get('config').get('name') for service in response.get('services', [])]
+        except Exception as e:
+            logging.info(f"Received error when listing project services: {e}")
+            return []
 
     class Package(object):
         def __init__(self, package, stg_client, bq_client, ps_client, sql_client, project_services):
