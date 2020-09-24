@@ -54,36 +54,40 @@ def schema_to_ckan(request):
         log_name = 'cloudfunctions.googleapis.com%2Fcloud-functions'
         cloud_logger = cloud_client.logger(log_name)
         # Function name of the function to wait on
-        func_to_wait_on = os.environ.get('FUNC_TO_WAIT_ON', 'Required parameter is missing')
+        # Not necessary
+        func_to_wait_on = os.environ.get('FUNC_TO_WAIT_ON', '')
         # Project id where the function is
         # If function is not in the same project ID of where this function is executed,
         # a delegated SA should be added
-        project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
+        project_id = os.environ.get('PROJECT_ID', '')
 
-        start_time = time.time()
-        # Could take some time before other function has logged
-        while True:
-            if time.time() - start_time > 40:
-                # No logs were found within time limit
-                # Other function has probably not been called
-                break
-            else:
-                logging.info('Refreshing logs of function {}...'.format(func_to_wait_on))
-                entries = request_log(cloud_logger, project_id, func_to_wait_on)
-                entries_list = []
-                for entry in entries:
-                    entries_list.append(entry.payload)
-
-                for i in range(len(entries_list)):
-                    if(i-1 >= 0):
-                        if('Function execution started' in entries_list[i]
-                                and 'Function execution took' not in entries_list[i-1]):
-                            return "The execution of function {} has not yet finished".format(func_to_wait_on), 503
-                # If logs have been found
-                if entries_list:
+        # Only do below if a function to wait on is defined:
+        if func_to_wait_on:
+            start_time = time.time()
+            # Could take some time before other function has logged
+            while True:
+                if time.time() - start_time > 40:
+                    # No logs were found within time limit
+                    # Other function has probably not been called
+                    logging.info("No logs of function {} were found within the time limit".format(func_to_wait_on))
                     break
+                else:
+                    logging.info('Refreshing logs of function {}...'.format(func_to_wait_on))
+                    entries = request_log(cloud_logger, project_id, func_to_wait_on)
+                    entries_list = []
+                    for entry in entries:
+                        entries_list.append(entry.payload)
 
-        # Upload schema to CKAN if function has been executed or has not run at all
+                    for i in range(len(entries_list)):
+                        if(i-1 >= 0):
+                            if('Function execution started' in entries_list[i]
+                                    and 'Function execution took' not in entries_list[i-1]):
+                                return "The execution of function {} has not yet finished".format(func_to_wait_on), 503
+                    # If logs have been found
+                    if entries_list:
+                        break
+
+        # Upload schema to CKAN
         ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
         status = requests.head(ckan_host).status_code
         if status == 200:
