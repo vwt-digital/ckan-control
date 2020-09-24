@@ -68,7 +68,7 @@ def schema_to_ckan(request):
                 # Other function has probably not been called
                 break
             else:
-                logging.info('Refreshing logs...')
+                logging.info('Refreshing logs of function {}...'.format(func_to_wait_on))
                 entries = request_log(cloud_logger, project_id, func_to_wait_on)
                 entries_list = []
                 for entry in entries:
