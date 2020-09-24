@@ -65,6 +65,8 @@ def schema_to_ckan(request):
             entries_list.append(entry.payload)
 
         for i in range(len(entries_list)):
+            logging.info('Log number in list: {}'.format(i))
+            logging.info('Log: {}'.format(entries_list[i]))
             if(i-1 >= 0):
                 if('Function execution started' in entries_list[i]
                         and 'Function execution took' not in entries_list[i-1]):
