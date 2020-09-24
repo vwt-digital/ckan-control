@@ -16,6 +16,7 @@ def request_log(cloud_logger, project_id, function_name):
     # Get timestamp of three minutes ago
     time_stamp = time_format(
         (datetime.datetime.utcnow() - datetime.timedelta(seconds=180)))
+    logging.info("Filtering logs on timestamp: {}".format(time_stamp))
 
     log_filter = "severity = DEBUG " \
                  "AND resource.labels.function_name = \"{}\" " \
