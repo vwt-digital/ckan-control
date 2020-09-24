@@ -11,6 +11,8 @@ This function consumes data-catalogs posted on a Pub/Sub Topic and adds them to 
     DATA_SELECTOR = The identifier used for this configuration, based on the DATA_CATALOG_PROPERTIES
     API_KEY = The CKAN API key to access the database
     CKAN_SITE_URL = The host URL of CKAN
+    FUNC_TO_WAIT_ON = The function to wait on before uploading to CKAN
+    PROJECT_ID = Project id of the project that contains the function to wait on
     ~~~
 3. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
 
