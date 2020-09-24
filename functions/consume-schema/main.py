@@ -6,6 +6,7 @@ from ckanprocessor import CKANProcessor
 import requests
 from google.cloud import logging as cloud_logging
 import datetime
+import time
 
 parser = CKANProcessor()
 
@@ -59,19 +60,30 @@ def schema_to_ckan(request):
         # a delegated SA should be added
         project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
 
-        logging.info('Refreshing logs...')
-        entries = request_log(cloud_logger, project_id, func_to_wait_on)
-        entries_list = []
-        for entry in entries:
-            entries_list.append(entry.payload)
+        start_time = time.time()
+        # Could take some time before other function has logged
+        while True:
+            if time.time() - start_time > 40:
+                # No logs were found within time limit
+                # Other function has probably not been called
+                break
+            else:
+                logging.info('Refreshing logs...')
+                entries = request_log(cloud_logger, project_id, func_to_wait_on)
+                entries_list = []
+                for entry in entries:
+                    entries_list.append(entry.payload)
 
-        for i in range(len(entries_list)):
-            logging.info('Log number in list: {}'.format(i))
-            logging.info('Log: {}'.format(entries_list[i]))
-            if(i-1 >= 0):
-                if('Function execution started' in entries_list[i]
-                        and 'Function execution took' not in entries_list[i-1]):
-                    return "The execution of function {} has not yet finished".format(func_to_wait_on), 503
+                for i in range(len(entries_list)):
+                    logging.info('Log number in list: {}'.format(i))
+                    logging.info('Log: {}'.format(entries_list[i]))
+                    if(i-1 >= 0):
+                        if('Function execution started' in entries_list[i]
+                                and 'Function execution took' not in entries_list[i-1]):
+                            return "The execution of function {} has not yet finished".format(func_to_wait_on), 503
+                # If logs have been found
+                if entries_list:
+                    break
 
         # Upload schema to CKAN if function has been executed or has not run at all
         ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
