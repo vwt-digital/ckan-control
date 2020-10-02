@@ -21,6 +21,7 @@ class CKANProcessor(object):
         secret_name = f"projects/{self.project_id}/secrets/{self.api_key_secret_id}/versions/latest"
         key_response = client.access_secret_version(request={"name": secret_name})
         self.api_key = key_response.payload.data.decode("UTF-8")
+        print(f"Tralala: {self.api_key}")
         self.ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
         self.session = requests.Session()
         self.session.verify = True
