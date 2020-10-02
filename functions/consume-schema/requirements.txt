@@ -20,7 +20,6 @@ idna-ssl==1.1.0
 libcst==0.3.12
 multidict==4.7.6
 mypy-extensions==0.4.3
-pkg-resources==0.0.0
 proto-plus==1.10.0
 protobuf==3.13.0
 pyasn1==0.4.8
