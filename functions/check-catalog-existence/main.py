@@ -15,7 +15,7 @@ from requests.auth import HTTPBasicAuth
 from google.auth import iam
 from google.auth.transport import requests as gcp_requests
 from google.oauth2 import service_account
-from google.cloud import storage, bigquery, exceptions as gcp_exceptions
+from google.cloud import secretmanager, storage, bigquery, exceptions as gcp_exceptions
 
 from ckanapi import RemoteCKAN, NotFound
 import urllib3
@@ -29,7 +29,13 @@ class CKANProcessor(object):
     def __init__(self):
         self.session = requests.Session()
         self.session.verify = True
-        self.host = RemoteCKAN(os.environ.get('CKAN_SITE_URL'), apikey=os.environ.get('CKAN_API_KEY'), session=self.session)
+        self.ckan_api_key_secret_id = os.environ.get('CKAN_API_KEY_SECRET_ID', 'Required parameter is missing')
+        self.project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
+        secret_client = secretmanager.SecretManagerServiceClient()
+        secret_name = f"projects/{self.project_id}/secrets/{self.ckan_api_key_secret_id}/versions/latest"
+        key_response = secret_client.access_secret_version(request={"name": secret_name})
+        self.ckan_api_key = key_response.payload.data.decode("UTF-8")
+        self.host = RemoteCKAN(os.environ.get('CKAN_SITE_URL'), apikey=self.ckan_api_key, session=self.session)
 
         self.credentials = request_auth_token()
         self.stg_client = storage.Client(credentials=self.credentials)
@@ -220,6 +226,13 @@ class JiraProcessor(object):
         self.req_headers = None
         self.req_auth = None
 
+        self.jia_api_key_secret_id = os.environ.get('JIRA_API_KEY_SECRET_ID', 'Required parameter is missing')
+        self.project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
+        secret_client = secretmanager.SecretManagerServiceClient()
+        secret_name = f"projects/{self.project_id}/secrets/{self.jira_api_key_secret_id}/versions/latest"
+        key_response = secret_client.access_secret_version(request={"name": secret_name})
+        self.jira_api_key = key_response.payload.data.decode("UTF-8")
+
     def create_issues(self, not_found_resources):
         self.not_found_resources = not_found_resources
 
@@ -252,7 +265,7 @@ class JiraProcessor(object):
             self.jira_config[item] = getattr(config, item)
 
         # Checking for the JIRA API key
-        if 'JIRA_API_KEY' not in os.environ:
+        if 'JIRA_API_KEY_SECRET_ID' not in os.environ:
             logging.error('Function has insufficient environment variables for creating JIRA issues')
             sys.exit(1)
 
@@ -264,7 +277,7 @@ class JiraProcessor(object):
 
         # Setup JIRA request variables
         self.req_headers = {"content-type": "application/json"}
-        self.req_auth = HTTPBasicAuth(self.jira_config['JIRA_USER'], os.environ['JIRA_API_KEY'])
+        self.req_auth = HTTPBasicAuth(self.jira_config['JIRA_USER'], self.jira_api_key)
 
         return True
 
@@ -431,7 +444,9 @@ def alarm_handler(signum, frame):
 def check_catalog_existence(request):
     logging.info("Initialized function")
 
-    if 'CKAN_API_KEY' in os.environ and 'CKAN_SITE_URL' in os.environ and hasattr(config, 'DELEGATED_SA'):
+    if 'PROJECT_ID' in os.environ and \
+       'CKAN_API_KEY_SECRET_ID' in os.environ and \
+       'CKAN_SITE_URL' in os.environ and hasattr(config, 'DELEGATED_SA'):
         CKANProcessor().process()
     else:
         logging.error('Function has insufficient configuration')

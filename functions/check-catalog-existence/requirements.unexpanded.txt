@@ -1,0 +1,10 @@
+ckanapi==4.3
+dataclasses==0.6
+google-api-python-client==1.12.3
+google-cloud-bigquery==2.0.0
+google-cloud-core==1.3.0
+google-cloud-logging==1.15.1
+google-cloud-secret-manager==2.0.0
+google-cloud-storage==1.31.2
+requests==2.22.0
+urllib3==1.25.8
