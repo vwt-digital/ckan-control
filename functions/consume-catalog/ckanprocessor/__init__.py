@@ -18,8 +18,10 @@ class CKANProcessor(object):
         self.api_key_secret_id = os.environ.get('API_KEY_SECRET_ID', 'Required parameter is missing')
         client = secretmanager.SecretManagerServiceClient()
         secret_name = f"projects/{self.project_id}/secrets/{self.api_key_secret_id}/versions/latest"
+        logging.info(f"blabla: {secret_name}")
         key_response = client.access_secret_version(request={"name": secret_name})
         self.api_key = key_response.payload.data.decode("UTF-8")
+        logging.info(f"tralala: {self.api_key}")
         self.ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
         self.session = requests.Session()
         self.session.verify = True
