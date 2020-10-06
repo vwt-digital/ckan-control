@@ -4,6 +4,8 @@ import logging
 import requests
 import urllib3
 
+from google.cloud import secretmanager
+
 from ckanapi import RemoteCKAN, ValidationError, NotFound, SearchError
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -12,7 +14,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 class CKANProcessor(object):
     def __init__(self):
         self.meta = config.DATA_CATALOG_PROPERTIES[os.environ.get('DATA_SELECTOR', 'Required parameter is missing')]
-        self.api_key = os.environ.get('API_KEY', 'Required parameter is missing')
+        self.project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
+        self.api_key_secret_id = os.environ.get('API_KEY_SECRET_ID', 'Required parameter is missing')
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = f"projects/{self.project_id}/secrets/{self.api_key_secret_id}/versions/latest"
+        key_response = client.access_secret_version(request={"name": secret_name})
+        self.api_key = key_response.payload.data.decode("UTF-8")
         self.ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
         self.session = requests.Session()
         self.session.verify = True
