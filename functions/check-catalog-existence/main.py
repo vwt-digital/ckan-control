@@ -226,7 +226,7 @@ class JiraProcessor(object):
         self.req_headers = None
         self.req_auth = None
 
-        self.jia_api_key_secret_id = os.environ.get('JIRA_API_KEY_SECRET_ID', 'Required parameter is missing')
+        self.jira_api_key_secret_id = os.environ.get('JIRA_API_KEY_SECRET_ID', 'Required parameter is missing')
         self.project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
         secret_client = secretmanager.SecretManagerServiceClient()
         secret_name = f"projects/{self.project_id}/secrets/{self.jira_api_key_secret_id}/versions/latest"
