@@ -86,6 +86,7 @@ def schema_to_ckan(request):
                     # If logs have been found
                     if entries_list:
                         break
+                    time.sleep(10)
 
         # Upload schema to CKAN
         ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
