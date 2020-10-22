@@ -3,6 +3,7 @@ import os
 import logging
 import requests
 import urllib3
+import check_storage
 
 from google.cloud import secretmanager
 
@@ -65,26 +66,24 @@ class CKANProcessor(object):
                 # Create list with future resources
                 future_resources_list = {}
                 for resource in data['distribution']:
+                    resource_dict = {
+                        "package_id": data_dict["name"],
+                        "url": resource['accessURL'],
+                        "description": resource.get('description', ''),
+                        "name": resource['title'],
+                        "format": resource['format'],
+                        "mediaType": resource.get('mediaType', '')
+                    }
                     # Check if resource has a "describedBy" because then it has a schema
                     if 'describedBy' in resource:
-                        resource_dict = {
-                            "package_id": data_dict["name"],
-                            "url": resource['accessURL'],
-                            "description": resource.get('description', ''),
-                            "name": resource['title'],
-                            "format": resource['format'],
-                            "mediaType": resource.get('mediaType', ''),
-                            "schema_urn": resource.get('describedBy', '')
-                        }
-                    else:
-                        resource_dict = {
-                            "package_id": data_dict["name"],
-                            "url": resource['accessURL'],
-                            "description": resource.get('description', ''),
-                            "name": resource['title'],
-                            "format": resource['format'],
-                            "mediaType": resource.get('mediaType', '')
-                        }
+                        # Add the tag to the resource
+                        resource_dict['schema_urn'] = resource['describedBy']
+                        # Check if the schema is already in the schemas storage
+                        schema = check_storage.check_schema_stg(resource['describedBy'])
+                        # If it is
+                        if schema:
+                            # Add it to the resource
+                            resource_dict['schema'] = schema
                     if resource['title'] not in future_resources_list:
                         future_resources_list[resource['title']] = resource_dict
                     else:
