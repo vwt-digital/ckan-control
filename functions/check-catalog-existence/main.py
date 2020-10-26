@@ -8,6 +8,7 @@ import requests
 import json
 import sys
 import signal
+import threading
 import re
 import googleapiclient.discovery
 
@@ -23,18 +24,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 TOKEN_URI = 'https://accounts.google.com/o/oauth2/token'  # nosec
 logging.basicConfig(level=logging.INFO)
-
-
-class TimeOutException(Exception):
-    pass
-
-
-def alarm_handler(signum, frame):
-    print("ALARM signal received")
-    raise TimeOutException()
-
-
-signal.signal(signal.SIGALRM, alarm_handler)
 
 
 class CKANProcessor(object):
@@ -451,6 +440,19 @@ def check_catalog_existence(request):
         CKANProcessor().process()
     else:
         logging.error('Function has insufficient configuration')
+
+
+class TimeOutException(Exception):
+    pass
+
+
+def alarm_handler(signum, frame):
+    print("ALARM signal received")
+    raise TimeOutException()
+
+
+if threading.current_thread() == threading.main_thread():
+    signal.signal(signal.SIGALRM, alarm_handler)
 
 
 if __name__ == '__main__':
