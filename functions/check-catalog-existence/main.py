@@ -114,8 +114,6 @@ class CKANProcessor(object):
 
         def process(self):
             if self.package.get('resources', None):
-                signal.signal(signal.SIGALRM, alarm_handler)
-
                 for resource in self.package.get('resources', []):
                     if 'format' in resource and 'name' in resource:
                         signal.alarm(20)
@@ -447,6 +445,7 @@ def check_catalog_existence(request):
     if 'PROJECT_ID' in os.environ and \
        'CKAN_API_KEY_SECRET_ID' in os.environ and \
        'CKAN_SITE_URL' in os.environ and hasattr(config, 'DELEGATED_SA'):
+        signal.signal(signal.SIGALRM, alarm_handler)
         CKANProcessor().process()
     else:
         logging.error('Function has insufficient configuration')
