@@ -25,6 +25,18 @@ TOKEN_URI = 'https://accounts.google.com/o/oauth2/token'  # nosec
 logging.basicConfig(level=logging.INFO)
 
 
+class TimeOutException(Exception):
+    pass
+
+
+def alarm_handler(signum, frame):
+    print("ALARM signal received")
+    raise TimeOutException()
+
+
+signal.signal(signal.SIGALRM, alarm_handler)
+
+
 class CKANProcessor(object):
     def __init__(self):
         self.session = requests.Session()
@@ -430,22 +442,12 @@ class ResourceNotFound(Exception):
         }
 
 
-class TimeOutException(Exception):
-    pass
-
-
-def alarm_handler(signum, frame):
-    print("ALARM signal received")
-    raise TimeOutException()
-
-
 def check_catalog_existence(request):
     logging.info("Initialized function")
 
     if 'PROJECT_ID' in os.environ and \
        'CKAN_API_KEY_SECRET_ID' in os.environ and \
        'CKAN_SITE_URL' in os.environ and hasattr(config, 'DELEGATED_SA'):
-        signal.signal(signal.SIGALRM, alarm_handler)
         CKANProcessor().process()
     else:
         logging.error('Function has insufficient configuration')
