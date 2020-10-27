@@ -3,6 +3,7 @@ import os
 import logging
 import requests
 import urllib3
+import check_storage
 
 from google.cloud import secretmanager
 
@@ -47,6 +48,13 @@ class CKANProcessor(object):
                     if schema_urn_resource == urn_schema:
                         # Give that resource a schema
                         self.patch_resource(resource, schema)
+                    # Else if it has a schema urn but no schema
+                    elif 'schema' not in resource:
+                        # Check if the schema can be found in the schemas storage
+                        schema_from_storage = check_storage.check_schema_stg(schema_urn_resource)
+                        if schema_from_storage:
+                            # If it can be found, give the resource a schema
+                            self.patch_resource(resource, schema_from_storage)
         else:
             logging.info("The schema from the topic does not have an ID")
 

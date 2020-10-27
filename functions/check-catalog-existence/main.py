@@ -8,6 +8,7 @@ import requests
 import json
 import sys
 import signal
+import threading
 import re
 import googleapiclient.discovery
 
@@ -114,8 +115,6 @@ class CKANProcessor(object):
 
         def process(self):
             if self.package.get('resources', None):
-                signal.signal(signal.SIGALRM, alarm_handler)
-
                 for resource in self.package.get('resources', []):
                     if 'format' in resource and 'name' in resource:
                         signal.alarm(20)
@@ -432,15 +431,6 @@ class ResourceNotFound(Exception):
         }
 
 
-class TimeOutException(Exception):
-    pass
-
-
-def alarm_handler(signum, frame):
-    print("ALARM signal received")
-    raise TimeOutException()
-
-
 def check_catalog_existence(request):
     logging.info("Initialized function")
 
@@ -450,6 +440,19 @@ def check_catalog_existence(request):
         CKANProcessor().process()
     else:
         logging.error('Function has insufficient configuration')
+
+
+class TimeOutException(Exception):
+    pass
+
+
+def alarm_handler(signum, frame):
+    print("ALARM signal received")
+    raise TimeOutException()
+
+
+if threading.current_thread() == threading.main_thread():
+    signal.signal(signal.SIGALRM, alarm_handler)
 
 
 if __name__ == '__main__':
