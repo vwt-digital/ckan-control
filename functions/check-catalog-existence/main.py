@@ -5,18 +5,16 @@ import google.auth
 import pytz
 import datetime
 import requests
-import json
 import sys
 import signal
 import threading
-import re
 import googleapiclient.discovery
+import atlassian
 
-from requests.auth import HTTPBasicAuth
 from google.auth import iam
 from google.auth.transport import requests as gcp_requests
 from google.oauth2 import service_account
-from google.cloud import secretmanager, storage, bigquery, exceptions as gcp_exceptions
+from google.cloud import secretmanager, storage, bigquery
 
 from ckanapi import RemoteCKAN, NotFound
 import urllib3
@@ -30,13 +28,17 @@ class CKANProcessor(object):
     def __init__(self):
         self.session = requests.Session()
         self.session.verify = True
-        self.ckan_api_key_secret_id = os.environ.get('CKAN_API_KEY_SECRET_ID', 'Required parameter is missing')
-        self.project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
-        secret_client = secretmanager.SecretManagerServiceClient()
-        secret_name = f"projects/{self.project_id}/secrets/{self.ckan_api_key_secret_id}/versions/latest"
-        key_response = secret_client.access_secret_version(request={"name": secret_name})
-        self.ckan_api_key = key_response.payload.data.decode("UTF-8")
-        self.host = RemoteCKAN(os.environ.get('CKAN_SITE_URL'), apikey=self.ckan_api_key, session=self.session)
+
+        self.ckan_host = os.environ.get('CKAN_SITE_URL')
+        self.ckan_api_key_secret_id = os.environ.get('CKAN_API_KEY_SECRET_ID')
+        self.project_id = os.environ.get('PROJECT_ID')
+
+        self.secret_client = secretmanager.SecretManagerServiceClient()
+        ckan_api_key_secret = self.secret_client.access_secret_version(
+            request={"name": f"projects/{self.project_id}/secrets/{self.ckan_api_key_secret_id}/versions/latest"})
+        self.ckan_api_key = ckan_api_key_secret.payload.data.decode("UTF-8")
+
+        self.host = RemoteCKAN(self.ckan_host, apikey=self.ckan_api_key, session=self.session)
 
         self.credentials = request_auth_token()
         self.stg_client = storage.Client(credentials=self.credentials)
@@ -51,8 +53,7 @@ class CKANProcessor(object):
         self.project_services = {}
 
     def process(self):
-        ckan_host = os.environ.get('CKAN_SITE_URL', 'Required parameter is missing')
-        status = requests.head(ckan_host, verify=True).status_code
+        status = requests.head(self.ckan_host, verify=True).status_code
         if status == 200:
             try:
                 package_list = self.host.action.package_list()
@@ -66,6 +67,7 @@ class CKANProcessor(object):
                 try:
                     package = self.host.action.package_show(id=key)
                 except NotFound:
+                    pass
                     logging.error(f"Package with key '{key}' not found")
                     continue
                 else:
@@ -74,7 +76,10 @@ class CKANProcessor(object):
                     if 'project_id' in package:
                         project_id = package['project_id']
                         if project_id not in self.project_services:
-                            self.project_services[project_id] = self.get_project_services(project_id)
+                            project_service_response = self.get_project_services(project_id)
+
+                            if project_service_response:
+                                not_found_resources.append(project_service_response)
 
                         not_found_resources.extend(self.Package(
                             package=package,
@@ -87,17 +92,31 @@ class CKANProcessor(object):
                         logging.debug(f"No Project ID specified for package '{package_name}'")
 
             if len(not_found_resources) > 0:
-                JiraProcessor().create_issues(not_found_resources)
+                JiraProcessor(self.secret_client).create_issues(not_found_resources)
         else:
             logging.error('CKAN not reachable')
 
     def get_project_services(self, project_id):
         try:
-            response = self.su_client.services().list(parent=f"projects/{project_id}", filter="state:ENABLED").execute()
-            return [service.get('config').get('name') for service in response.get('services', [])]
-        except Exception as e:
-            logging.info(f"Received error when listing project services: {e}")
-            return []
+            response = self.su_client.services().list(
+                parent=f"projects/{project_id}", filter="state:ENABLED").execute()
+            self.project_services[project_id] = [
+                service.get('config').get('name') for service in response.get('services', [])]
+            return None
+        except Exception:
+            pass
+            timezone = pytz.timezone("Europe/Amsterdam")
+            timestamp = datetime.datetime.now(tz=timezone)
+
+            return {
+                "message": "Project not found",
+                "project_id": project_id,
+                "package_name": "google-cloud-project",
+                "resource_name": project_id,
+                "type": "GCP Project",
+                "access_url": "",
+                "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            }
 
     class Package(object):
         def __init__(self, package, stg_client, bq_client, ps_client, sql_client, project_services):
@@ -135,17 +154,21 @@ class CKANProcessor(object):
                             elif resource['format'] == 'API':
                                 self.check_api(resource)
                             else:
-                                logging.debug(f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
+                                logging.debug(
+                                    f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
                                 continue
                         except ResourceNotFound as e:
+                            pass
                             self.not_found_resources.append(e.properties['error'])
                             continue
                         except TimeOutException:
+                            pass
                             logging.info(
                                 f"A timeout occurred when checking resource '{resource['name']}' " +
                                 f"with format '{resource['format']}': the request took more than 20s")
                             continue
                         except Exception as e:
+                            pass
                             logging.info(
                                 f"An exception occurred when checking resource '{resource['name']}' " +
                                 f"with format '{resource['format']}': {str(e)}")
@@ -162,7 +185,8 @@ class CKANProcessor(object):
         def check_storage(self, resource):
             try:
                 buckets = self.stg_client.list_buckets(project=self.project_id, fields='items/name')
-            except (gcp_exceptions.NotFound, gcp_exceptions.Forbidden):
+            except Exception:
+                pass
                 raise ResourceNotFound(self.package, resource)
             else:
                 for bucket in buckets:
@@ -172,38 +196,50 @@ class CKANProcessor(object):
                 raise ResourceNotFound(self.package, resource)
 
         def check_cloudsql(self, resource):
-            resources = []
-            instances_response = self.sql_client.instances().list(project=self.project_id).execute()
-            instances = [item['name'] for item in instances_response.get('items', [])]
+            try:
+                resources = []
+                instances_response = self.sql_client.instances().list(project=self.project_id).execute()
+                instances = [item['name'] for item in instances_response.get('items', [])]
 
-            if resource['format'] == 'cloudsql-db':
-                for instance in instances:
-                    databases = self.sql_client.databases().list(project=self.project_id, instance=instance).execute()
-                    for database in databases.get('items', []):
-                        resources.append(database['name'])
-            else:
-                resources = instances
-
-            if resource['name'] not in resources:
+                if resource['format'] == 'cloudsql-db':
+                    for instance in instances:
+                        databases = self.sql_client.databases().list(project=self.project_id, instance=instance).execute()
+                        for database in databases.get('items', []):
+                            resources.append(database['name'])
+                else:
+                    resources = instances
+            except Exception:
+                pass
                 raise ResourceNotFound(self.package, resource)
+            else:
+                if resource['name'] not in resources:
+                    raise ResourceNotFound(self.package, resource)
 
         def check_bigquery(self, resource):
-            datasets_list = self.bq_client.list_datasets(project=self.project_id)
-            datasets = [dataset.dataset_id for dataset in datasets_list]
-
-            if resource['name'] not in datasets:
+            try:
+                datasets_list = self.bq_client.list_datasets(project=self.project_id)
+                datasets = [dataset.dataset_id for dataset in datasets_list]
+            except Exception:
+                pass
                 raise ResourceNotFound(self.package, resource)
+            else:
+                if resource['name'] not in datasets:
+                    raise ResourceNotFound(self.package, resource)
 
         def check_pubsub(self, resource):
-            if resource['format'] == 'subscription':
-                subscriptions = self.ps_client.projects().subscriptions().list(project=f"projects/{self.project_id}").execute()
-                resources = [sub['name'].split('/')[-1] for sub in subscriptions.get('subscriptions', [])]
-            else:
-                topics = self.ps_client.projects().topics().list(project=f"projects/{self.project_id}").execute()
-                resources = [top['name'].split('/')[-1] for top in topics.get('topics', [])]
-
-            if resource['name'] not in resources:
+            try:
+                if resource['format'] == 'subscription':
+                    subscriptions = self.ps_client.projects().subscriptions().list(project=f"projects/{self.project_id}").execute()
+                    resources = [sub['name'].split('/')[-1] for sub in subscriptions.get('subscriptions', [])]
+                else:
+                    topics = self.ps_client.projects().topics().list(project=f"projects/{self.project_id}").execute()
+                    resources = [top['name'].split('/')[-1] for top in topics.get('topics', [])]
+            except Exception:
+                pass
                 raise ResourceNotFound(self.package, resource)
+            else:
+                if resource['name'] not in resources:
+                    raise ResourceNotFound(self.package, resource)
 
         def check_api(self, resource):
             if 'url' in resource:
@@ -218,179 +254,66 @@ class CKANProcessor(object):
 
 
 class JiraProcessor(object):
-    def __init__(self):
-        self.not_found_resources = None
-
-        self.jira_config = {}
-        self.req_headers = None
-        self.req_auth = None
-
-        self.jira_api_key_secret_id = os.environ.get('JIRA_API_KEY_SECRET_ID', 'Required parameter is missing')
-        self.project_id = os.environ.get('PROJECT_ID', 'Required parameter is missing')
-        secret_client = secretmanager.SecretManagerServiceClient()
-        secret_name = f"projects/{self.project_id}/secrets/{self.jira_api_key_secret_id}/versions/latest"
-        key_response = secret_client.access_secret_version(request={"name": secret_name})
-        self.jira_api_key = key_response.payload.data.decode("UTF-8")
+    def __init__(self, secret_client):
+        self.secret_client = secret_client
 
     def create_issues(self, not_found_resources):
-        self.not_found_resources = not_found_resources
-
-        if not self.set_configuration():  # Set configuration
-            return
-
-        issues_already_existing = self.retrieve_existing_issues()  # Search for already existing JIRA tickets
-
-        # Create JIRA issue objects for non-existing packages that don't have a JIRA ticket already
-        issues_to_create = []
-        for resource in self.not_found_resources:
-            if resource['resource_name'] not in issues_already_existing:
-                issues_to_create.append(self.create_issue_object(resource))
-            else:
-                logging.info(
-                    f"JIRA ticket for issue '{resource['resource_name']}' does already " +
-                    f"exist: '{issues_already_existing[resource['resource_name']]}'")
-
-        new_issues = self.post_issues(issues_to_create)
-        self.move_to_sprint(new_issues)
-
-    def set_configuration(self):
         # Checking for JIRA attributes in configuration file
-        for item in ['JIRA_ACTIVE', 'JIRA_USER', 'JIRA_API_DOMAIN', 'JIRA_PROJECT_ID', 'JIRA_ISSUE_TYPE_ID',
-                     'JIRA_BOARD_ID', 'JIRA_EPIC']:
+        for item in ['JIRA_USER', 'JIRA_SERVER', 'JIRA_PROJECT', 'JIRA_PROJECTS', 'JIRA_BOARD',
+                     'JIRA_EPIC', 'JIRA_SECRET_ID']:
             if not hasattr(config, item):
                 logging.error('Function has insufficient configuration for creating JIRA issues')
                 sys.exit(1)
 
-            self.jira_config[item] = getattr(config, item)
+        # Setup configuration variables
+        gcp_project_id = os.environ.get('PROJECT_ID')
+        jira_user = config.JIRA_USER
+        jira_server = config.JIRA_SERVER
+        jira_project = config.JIRA_PROJECT
+        jira_projects = config.JIRA_PROJECTS
+        jira_board = config.JIRA_BOARD
+        jira_epic = config.JIRA_EPIC
+        jira_secret_id = config.JIRA_SECRET_ID
 
-        # Checking for the JIRA API key
-        if 'JIRA_API_KEY_SECRET_ID' not in os.environ:
-            logging.error('Function has insufficient environment variables for creating JIRA issues')
-            sys.exit(1)
+        jira_api_key_secret = self.secret_client.access_secret_version(
+            request={"name": f"projects/{gcp_project_id}/secrets/{jira_secret_id}/versions/latest"})
+        jira_api_key = jira_api_key_secret.payload.data.decode("UTF-8")
 
-        # Check if JIRA functionality is active
-        if not self.jira_config['JIRA_ACTIVE']:
-            logging.info(f"JIRA is inactive, processed a total of {len(self.not_found_resources)} missing resources")
-            logging.info(json.dumps(self.not_found_resources))
-            return None
+        # Create Jira instance
+        client = atlassian.jira_init(jira_user, jira_api_key, jira_server)
 
-        # Setup JIRA request variables
-        self.req_headers = {"content-type": "application/json"}
-        self.req_auth = HTTPBasicAuth(self.jira_config['JIRA_USER'], self.jira_api_key)
+        # Create Jira filters
+        jql_prefix = f"type = Bug AND status != Done AND status != Cancelled " \
+                     f"AND \"Epic Link\" = {jira_epic} " \
+                     "AND text ~ \"CKAN resource not found\" " \
+                     "AND project = "
+        projects = [jql_prefix + project for project in jira_projects.split('+')]
+        jql = " OR ".join(projects)
 
-        return True
+        # Retrieve current issues and sprint ID
+        titles = atlassian.list_issue_titles(client, jql)
+        sprint_id = atlassian.get_current_sprint(client, jira_board)
 
-    def retrieve_existing_issues(self):
-        try:
-            # Search format "CKAN resource not found: '<dataset_name>'"
-            issues_search_payload = {"jql": (f"project = {self.jira_config['JIRA_PROJECT_ID']} "
-                                             f"AND issuetype = {self.jira_config['JIRA_ISSUE_TYPE_ID']} "
-                                             "AND status in (\"To Do\", \"In Progress\", \"For Review\", Feedback) "
-                                             f"AND \"Epic Link\" = {self.jira_config['JIRA_EPIC']} "
-                                             "AND text ~ \"CKAN resource not found\" "
-                                             "ORDER BY priority DESC"),
-                                     "fields": ["summary"]}
-            issues_already_existing = {}
+        # Create JIRA issue objects for non-existing packages that don't have a JIRA ticket already
+        for resource in not_found_resources:
+            title = f"CKAN resource not found: '{resource['resource_name']}'"
 
-            issues_search_response = requests.post(
-                f"{self.jira_config['JIRA_API_DOMAIN']}/rest/api/3/search", headers=self.req_headers, auth=self.req_auth,
-                data=json.dumps(issues_search_payload))
+            if title not in titles:
+                logging.info(f"Creating jira ticket: {title}")
+                description = (
+                    f"The resource `{resource['project_id']}/{resource['package_name']}/{resource['resource_name']}` "
+                    "could not be identified by the automated data-catalog existence check. Please check the "
+                    "existence of the resource within GCP, or remove the dataset resource from the data-catalog.")
 
-            if issues_search_response.ok:
-                issues_search_content = json.loads(issues_search_response.content)
-                for issue in issues_search_content.get("issues", []):
-                    re_match = re.match(r"(?:CKAN resource not found: )(?:')([\w-]+)(?:')", issue['fields']['summary'])
-                    if re_match:
-                        issues_already_existing[re_match.group(1)] = issue['key']
+                issue = atlassian.create_issue(
+                    client=client,
+                    project=jira_project,
+                    title=title,
+                    description=description)
 
-            return issues_already_existing
-        except requests.exceptions.RequestException as e:
-            logging.info(f"Exception occurred when searching issues: {e}")
-            return None
-
-    def create_issue_object(self, resource):
-        return {
-            "fields": {
-                "project": {"id": int(self.jira_config['JIRA_PROJECT_ID'])},
-                "issuetype": {"id": int(self.jira_config['JIRA_ISSUE_TYPE_ID'])},
-                "customfield_10014": self.jira_config['JIRA_EPIC'],
-                "summary": "CKAN resource not found: '{}'".format(resource['resource_name']),
-                "description": {
-                    "type": "doc",
-                    "version": 1,
-                    "content": [
-                        {
-                            "type": "paragraph",
-                            "content": [
-                                {
-                                    "text": (
-                                        "The resource `{}/{}/{}` could not be identified by the automated "
-                                        "data-catalog existence check. Please check the existence of the resource "
-                                        "within GCP, or remove the dataset resource from the data-catalog.".format(
-                                            resource['project_id'], resource['package_name'],
-                                            resource['resource_name'])),
-                                    "type": "text"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }
-        }
-
-    def post_issues(self, issues_to_create):
-        if len(issues_to_create) > 0:
-            try:
-                # Post the non-existing packages to JIRA as issues
-                issues_payload = {"issueUpdates": issues_to_create}
-                issues_response = requests.post(
-                    f"{self.jira_config['JIRA_API_DOMAIN']}/rest/api/3/issue/bulk", headers=self.req_headers,
-                    auth=self.req_auth, data=json.dumps(issues_payload))
-
-                # Get the current active JIRA spring
-                if issues_response and issues_response.ok:
-                    logging.info(f"Created {len(issues_to_create)} issues within Epic '{config.JIRA_EPIC}'")
-                    issues_content = json.loads(issues_response.content)
-                    return [issue['id'] for issue in issues_content['issues']]
-                return None
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Exception occurred when posting issues: {e}")
-                sys.exit(1)
-        else:
-            logging.error("No newly created issues found")
-            sys.exit(1)
-
-    def move_to_sprint(self, new_issues):
-        try:
-            sprint_response = requests.get(
-                f"{self.jira_config['JIRA_API_DOMAIN']}/rest/agile/1.0/board/{self.jira_config['JIRA_BOARD_ID']}/sprint",
-                headers=self.req_headers, auth=self.req_auth, params={'state': 'active', 'maxResults': 1})
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Exception occurred when retrieving current sprint: {e}")
-            sys.exit(1)
-
-        # Move all created issues towards the current JIRA spring
-        if sprint_response.ok:
-            sprint_obj = json.loads(sprint_response.content)
-            sprint_id = sprint_obj['values'][0]['id'] if len(sprint_obj['values']) > 0 else None
-
-            sprint_payload = {"issues": new_issues}
-
-            try:
-                sprint_move_response = requests.post(
-                    f"{self.jira_config['JIRA_API_DOMAIN']}/rest/agile/1.0/sprint/{sprint_id}/issue",
-                    headers=self.req_headers, auth=self.req_auth, data=json.dumps(sprint_payload))
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Exception occurred when moving issues to current sprint: {e}")
-                sys.exit(1)
-
-            if sprint_move_response.ok:
-                logging.info(f"Moved {len(new_issues)} issues to Sprint '{sprint_id}'")
+                atlassian.add_to_sprint(client, sprint_id, issue.key)
             else:
-                logging.error(f"Moving new JIRA issues '{','.join(new_issues)}' returned status " +
-                              f"code '{sprint_move_response.status_code}'")
-        else:
-            logging.error(f"Retrieving current JIRA sprint returned status code '{sprint_response.status_code}'")
+                logging.info(f"Already found jira ticket: {title}")
 
 
 def request_auth_token():
