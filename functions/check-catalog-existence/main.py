@@ -259,11 +259,18 @@ class JiraProcessor(object):
 
     def create_issues(self, not_found_resources):
         # Checking for JIRA attributes in configuration file
-        for item in ['JIRA_USER', 'JIRA_SERVER', 'JIRA_PROJECT', 'JIRA_PROJECTS', 'JIRA_BOARD',
+        for item in ['JIRA_ACTIVE', 'JIRA_USER', 'JIRA_SERVER', 'JIRA_PROJECT', 'JIRA_PROJECTS', 'JIRA_BOARD',
                      'JIRA_EPIC', 'JIRA_SECRET_ID']:
             if not hasattr(config, item):
                 logging.error('Function has insufficient configuration for creating JIRA issues')
                 sys.exit(1)
+
+        if not config.JIRA_ACTIVE:
+            not_found_resources_names = [resource["resource_name"] for resource in not_found_resources]
+            logging.error(
+                f"JIRA is inactive, processed a total of {len(not_found_resources)} missing resources: "
+                f"{' ,'.join(not_found_resources_names)}")
+            return None
 
         # Setup configuration variables
         gcp_project_id = os.environ.get('PROJECT_ID')
@@ -300,10 +307,16 @@ class JiraProcessor(object):
 
             if title not in titles:
                 logging.info(f"Creating jira ticket: \"{title}\"")
-                description = (
-                    f"The resource `{resource['project_id']}/{resource['package_name']}/{resource['resource_name']}` "
-                    "could not be identified by the automated data-catalog existence check. Please check the "
-                    "existence of the resource within GCP, or remove the dataset resource from the data-catalog.")
+                if resource['package_name'] == "google-cloud-project":
+                    description = (
+                        f"The Google Cloud Project `{resource['project_id']}` could not be found. Please check the "
+                        "existence of the project within GCP, or remove the dataset from the data-catalog.")
+                else:
+                    description = (
+                        f"The resource `{resource['project_id']}/{resource['package_name']}/"
+                        f"{resource['resource_name']}` could not be identified by the automated data-catalog existence "
+                        f"check. Please check the existence of the resource within GCP, or remove the dataset resource "
+                        f"from the data-catalog.")
 
                 issue = atlassian.create_issue(
                     client=client,
