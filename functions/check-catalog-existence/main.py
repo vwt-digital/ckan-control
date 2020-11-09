@@ -307,10 +307,16 @@ class JiraProcessor(object):
 
             if title not in titles:
                 logging.info(f"Creating jira ticket: \"{title}\"")
-                description = (
-                    f"The resource `{resource['project_id']}/{resource['package_name']}/{resource['resource_name']}` "
-                    "could not be identified by the automated data-catalog existence check. Please check the "
-                    "existence of the resource within GCP, or remove the dataset resource from the data-catalog.")
+                if resource['package_name'] == "google-cloud-project":
+                    description = (
+                        f"The Google Cloud Project `{resource['project_id']}` could not be found. Please check the "
+                        "existence of the project within GCP, or remove the dataset from the data-catalog.")
+                else:
+                    description = (
+                        f"The resource `{resource['project_id']}/{resource['package_name']}/"
+                        f"{resource['resource_name']}` could not be identified by the automated data-catalog existence "
+                        f"check. Please check the existence of the resource within GCP, or remove the dataset resource "
+                        f"from the data-catalog.")
 
                 issue = atlassian.create_issue(
                     client=client,
