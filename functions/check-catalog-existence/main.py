@@ -259,11 +259,18 @@ class JiraProcessor(object):
 
     def create_issues(self, not_found_resources):
         # Checking for JIRA attributes in configuration file
-        for item in ['JIRA_USER', 'JIRA_SERVER', 'JIRA_PROJECT', 'JIRA_PROJECTS', 'JIRA_BOARD',
+        for item in ['JIRA_ACTIVE', 'JIRA_USER', 'JIRA_SERVER', 'JIRA_PROJECT', 'JIRA_PROJECTS', 'JIRA_BOARD',
                      'JIRA_EPIC', 'JIRA_SECRET_ID']:
             if not hasattr(config, item):
                 logging.error('Function has insufficient configuration for creating JIRA issues')
                 sys.exit(1)
+
+        if not config.JIRA_ACTIVE:
+            not_found_resources_names = [resource["resource_name"] for resource in not_found_resources]
+            logging.error(
+                f"JIRA is inactive, processed a total of {len(not_found_resources)} missing resources: "
+                f"{' ,'.join(not_found_resources_names)}")
+            return None
 
         # Setup configuration variables
         gcp_project_id = os.environ.get('PROJECT_ID')
