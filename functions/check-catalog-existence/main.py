@@ -299,7 +299,7 @@ class JiraProcessor(object):
             title = f"CKAN resource not found: '{resource['resource_name']}'"
 
             if title not in titles:
-                logging.info(f"Creating jira ticket: {title}")
+                logging.info(f"Creating jira ticket: \"{title}\"")
                 description = (
                     f"The resource `{resource['project_id']}/{resource['package_name']}/{resource['resource_name']}` "
                     "could not be identified by the automated data-catalog existence check. Please check the "
@@ -311,9 +311,8 @@ class JiraProcessor(object):
                     title=title,
                     description=description)
 
+                atlassian.add_to_epic(client, jira_epic, issue.key)
                 atlassian.add_to_sprint(client, sprint_id, issue.key)
-            else:
-                logging.info(f"Already found jira ticket: {title}")
 
 
 def request_auth_token():
