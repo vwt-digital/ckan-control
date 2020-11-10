@@ -21,7 +21,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 TOKEN_URI = 'https://accounts.google.com/o/oauth2/token'  # nosec
+
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("googleapiclient.http").setLevel(logging.ERROR)
 
 
 class CKANProcessor(object):
@@ -76,10 +78,21 @@ class CKANProcessor(object):
                     if 'project_id' in package:
                         project_id = package['project_id']
                         if project_id not in self.project_services:
-                            project_service_response = self.get_project_services(project_id)
+                            self.project_services[project_id] = self.get_project_services(project_id)
 
-                            if project_service_response:
-                                not_found_resources.append(project_service_response)
+                        if not self.project_services[project_id]:
+                            timezone = pytz.timezone("Europe/Amsterdam")
+                            timestamp = datetime.datetime.now(tz=timezone)
+
+                            not_found_resources.append({
+                                "message": "Project not found",
+                                "project_id": project_id,
+                                "package_name": "google-cloud-project",
+                                "resource_name": project_id,
+                                "type": "GCP Project",
+                                "access_url": f"https://console.cloud.google.com/home/dashboard?project={project_id}",
+                                "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                            })
 
                         not_found_resources.extend(self.Package(
                             package=package,
@@ -100,23 +113,10 @@ class CKANProcessor(object):
         try:
             response = self.su_client.services().list(
                 parent=f"projects/{project_id}", filter="state:ENABLED").execute()
-            self.project_services[project_id] = [
-                service.get('config').get('name') for service in response.get('services', [])]
-            return None
+            return [service.get('config').get('name') for service in response.get('services', [])]
         except Exception:
             pass
-            timezone = pytz.timezone("Europe/Amsterdam")
-            timestamp = datetime.datetime.now(tz=timezone)
-
-            return {
-                "message": "Project not found",
-                "project_id": project_id,
-                "package_name": "google-cloud-project",
-                "resource_name": project_id,
-                "type": "GCP Project",
-                "access_url": "",
-                "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-            }
+            return None
 
     class Package(object):
         def __init__(self, package, stg_client, bq_client, ps_client, sql_client, project_services):
@@ -185,14 +185,12 @@ class CKANProcessor(object):
         def check_storage(self, resource):
             try:
                 buckets = self.stg_client.list_buckets(project=self.project_id, fields='items/name')
-            except Exception:
-                pass
-                raise ResourceNotFound(self.package, resource)
-            else:
+
                 for bucket in buckets:
                     if bucket.name == resource['name']:
                         return True
-
+            except Exception:
+                pass
                 raise ResourceNotFound(self.package, resource)
 
         def check_cloudsql(self, resource):
@@ -268,8 +266,8 @@ class JiraProcessor(object):
         if not config.JIRA_ACTIVE:
             not_found_resources_names = [resource["resource_name"] for resource in not_found_resources]
             logging.error(
-                f"JIRA is inactive, processed a total of {len(not_found_resources)} missing resources: "
-                f"{' ,'.join(not_found_resources_names)}")
+                f"Creating JIRA tickets is manually disabled. Check processed a total of {len(not_found_resources)} "
+                f"missing resources: {', '.join(not_found_resources_names)}")
             return None
 
         # Setup configuration variables
