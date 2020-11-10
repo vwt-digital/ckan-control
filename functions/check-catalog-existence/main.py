@@ -266,8 +266,8 @@ class JiraProcessor(object):
         if not config.JIRA_ACTIVE:
             not_found_resources_names = [resource["resource_name"] for resource in not_found_resources]
             logging.error(
-                f"JIRA is inactive, processed a total of {len(not_found_resources)} missing resources: "
-                f"{', '.join(not_found_resources_names)}")
+                f"Creating JIRA tickets is manually disabled. Check processed a total of {len(not_found_resources)} "
+                f"missing resources: {', '.join(not_found_resources_names)}")
             return None
 
         # Setup configuration variables
