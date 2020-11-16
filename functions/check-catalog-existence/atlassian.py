@@ -65,3 +65,70 @@ def add_to_sprint(client, sprint_id, issue_key):
     """
 
     client.add_issues_to_sprint(sprint_id, [issue_key])
+
+
+@retry(ConnectionError, tries=3, delay=2, backoff=2)
+def add_to_epic(client, epic_id, issue_key):
+    """
+    Adds issues to an epic.
+    """
+    client.add_issues_to_epic(epic_id, [issue_key])
+
+
+@retry(ConnectionError, tries=3, delay=2, backoff=2)
+def list_issue_comment_ids(client, issue_id):
+    """
+    Get jira issue from its ID
+    """
+
+    issue = client.issue(issue_id)
+
+    return issue.fields.comment.comments
+
+
+@retry(ConnectionError, tries=3, delay=2, backoff=2)
+def get_issue_id(client, issue):
+    """
+    Get issue ids based on a jira query.
+    """
+
+    return issue.id
+
+
+@retry(ConnectionError, tries=3, delay=2, backoff=2)
+def add_comment(client, issue, comment):
+    """
+    Add a comment to an issue
+    """
+
+    client.add_comment(issue, comment)
+
+
+@retry(ConnectionError, tries=3, delay=2, backoff=2)
+def update_comment(client, issue, comment_id, comment):
+    """
+    Update a comment of an issue
+    """
+
+    comment_to_edit = client.comment(issue, comment_id)
+    comment_to_edit.update(body=comment)
+
+
+@retry(ConnectionError, tries=3, delay=2, backoff=2)
+def get_comment_body(client, issue, comment_id):
+    """
+    Get body of a comment of an issue
+    """
+
+    comment = client.comment(issue, comment_id)
+    comment_body = comment.body
+    return comment_body
+
+
+@retry(ConnectionError, tries=3, delay=2, backoff=2)
+def list_issues(client, jql):
+    """
+    Get issues based on a jira query.
+    """
+
+    return client.search_issues(jql, maxResults=None)
