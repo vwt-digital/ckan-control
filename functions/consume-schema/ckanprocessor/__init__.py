@@ -35,23 +35,23 @@ class CKANProcessor(object):
     def schema_to_ckan(self, schema):
         # If the schema has an id
         if '$id' in schema:
-            urn_schema = schema['$id']
+            tag_schema = schema['$id']
             # Get all resources on CKAN that are a topic
             resources = self.host.action.resource_search(query="format:topic")
             resources = resources['results']
             for resource in resources:
-                # If the resource has a key 'schema_urn'
-                if 'schema_urn' in resource:
-                    schema_urn_resource = resource['schema_urn']
-                    # If the urn of the processed schema coming from the topic
+                # If the resource has a key 'schema_tag'
+                if 'schema_tag' in resource:
+                    schema_tag_resource = resource['schema_tag']
+                    # If the tag of the processed schema coming from the topic
                     # is the same as one of the resources
-                    if schema_urn_resource == urn_schema:
+                    if schema_tag_resource == tag_schema:
                         # Give that resource a schema
                         self.patch_resource(resource, schema)
-                    # Else if it has a schema urn but no schema
+                    # Else if it has a schema tag but no schema
                     elif 'schema' not in resource:
                         # Check if the schema can be found in the schemas storage
-                        schema_from_storage = check_storage.check_schema_stg(schema_urn_resource)
+                        schema_from_storage = check_storage.check_schema_stg(schema_tag_resource)
                         if schema_from_storage:
                             # If it can be found, give the resource a schema
                             self.patch_resource(resource, schema_from_storage)
