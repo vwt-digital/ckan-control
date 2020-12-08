@@ -31,6 +31,8 @@ def check_schema_stg(tag):
 
 def schema_name_from_tag(tag):
     tag = tag.replace('/', '-')
+    if not tag.endswith(".json"):
+        tag = tag + ".json"
     return tag
 
 
