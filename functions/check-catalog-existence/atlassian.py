@@ -51,9 +51,15 @@ def get_current_sprint(client, board_id):
     Returns the current sprint for a scrum board.
     """
 
+    current_sprint = None
     sprints = client.sprints(board_id)
 
-    current_sprint = list(sprints)[-1]
+    for sprint in reversed(sprints):
+        if sprint.state == 'ACTIVE':
+            current_sprint = sprint
+
+    if not current_sprint:
+        current_sprint = list(sprints)[-1]
 
     return current_sprint.id
 
