@@ -77,7 +77,7 @@ class CKANProcessor(object):
                     # Check if resource has a "describedBy" because then it has a schema
                     if 'describedBy' in resource:
                         # Add the tag to the resource
-                        resource_dict['schema_urn'] = resource['describedBy']
+                        resource_dict['schema_tag'] = resource['describedBy']
                         # Check if the schema is already in the schemas storage
                         schema = check_storage.check_schema_stg(resource['describedBy'])
                         # If it is
