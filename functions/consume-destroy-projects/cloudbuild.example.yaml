@@ -1,0 +1,22 @@
+---
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        _API_KEY=""
+        _CKAN_DOMAIN=""
+        gcloud functions deploy ${PROJECT_ID}-consume-destroyprojects-func \
+          --entry-point=handler \
+          --runtime=python37 \
+          --trigger-http \
+          --project=${PROJECT_ID} \
+          --region=europe-west1 \
+          --max-instances=1 \
+          --timeout=540 \
+          --set-env-vars=API_KEY=$${_API_KEY} \
+          --set-env-vars=CKAN_SITE_URL="https://$${_CKAN_DOMAIN}"
+        gcloud functions set-iam-policy ${PROJECT_ID}-consume-jsontockan-func --region=europe-west1 \
+          --project=${PROJECT_ID} consume_func_permissions.json
+    dir: 'functions/consume-destroy-projects'
