@@ -140,19 +140,26 @@ class CKANProcessor(object):
 
                         try:
                             if resource['format'] == 'blob-storage':
-                                self.check_storage(resource)
+                                if self.check_storage(resource) is False:
+                                    raise ResourceNotFound(self.package, resource)
                             elif resource['format'] in ['datastore', 'datastore-index']:
-                                self.check_service(resource, 'datastore.googleapis.com')
+                                if self.check_service(resource, 'datastore.googleapis.com') is False:
+                                    raise ResourceNotFound(self.package, resource)
                             elif resource['format'] == 'firestore':
-                                self.check_service(resource, 'firestore.googleapis.com')
+                                if self.check_service(resource, 'firestore.googleapis.com') is False:
+                                    raise ResourceNotFound(self.package, resource)
                             elif resource['format'] in ['cloudsql-instance', 'cloudsql-db']:
-                                self.check_cloudsql(resource)
+                                if self.check_cloudsql(resource) is False:
+                                    raise ResourceNotFound(self.package, resource)
                             elif resource['format'] == 'bigquery-dataset':
-                                self.check_bigquery(resource)
+                                if self.check_bigquery(resource) is False:
+                                    raise ResourceNotFound(self.package, resource)
                             elif resource['format'] in ['topic', 'subscription']:
-                                self.check_pubsub(resource)
+                                if self.check_pubsub(resource) is False:
+                                    raise ResourceNotFound(self.package, resource)
                             elif resource['format'] == 'API':
-                                self.check_api(resource)
+                                if self.check_api(resource) is False:
+                                    raise ResourceNotFound(self.package, resource)
                             else:
                                 logging.debug(
                                     f"Skipping resource '{resource['name']}' with format '{resource['format']}'")
@@ -191,7 +198,7 @@ class CKANProcessor(object):
                         return True
             except Exception:
                 pass
-                raise ResourceNotFound(self.package, resource)
+                return False
 
         def check_cloudsql(self, resource):
             try:
@@ -208,10 +215,11 @@ class CKANProcessor(object):
                     resources = instances
             except Exception:
                 pass
-                raise ResourceNotFound(self.package, resource)
+                return False
             else:
                 if resource['name'] not in resources:
-                    raise ResourceNotFound(self.package, resource)
+                    return False
+                return True
 
         def check_bigquery(self, resource):
             try:
@@ -219,10 +227,11 @@ class CKANProcessor(object):
                 datasets = [dataset.dataset_id for dataset in datasets_list]
             except Exception:
                 pass
-                raise ResourceNotFound(self.package, resource)
+                return False
             else:
                 if resource['name'] not in datasets:
-                    raise ResourceNotFound(self.package, resource)
+                    return False
+                return True
 
         def check_pubsub(self, resource):
             try:
@@ -234,21 +243,24 @@ class CKANProcessor(object):
                     resources = [top['name'].split('/')[-1] for top in topics.get('topics', [])]
             except Exception:
                 pass
-                raise ResourceNotFound(self.package, resource)
+                return False
             else:
                 if resource['name'] not in resources:
-                    raise ResourceNotFound(self.package, resource)
+                    return False
+                return True
 
         def check_api(self, resource):
             if 'url' in resource:
                 response = requests.get(resource['url'])
 
                 if not response.ok:
-                    raise ResourceNotFound(self.package, resource)
+                    return False
+                return True
 
         def check_service(self, resource, service_name):
             if service_name not in self.project_services:
-                raise ResourceNotFound(self.package, resource)
+                return False
+            return True
 
 
 class JiraProcessor(object):
