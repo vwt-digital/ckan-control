@@ -199,6 +199,7 @@ class CKANProcessor(object):
             except Exception:
                 pass
                 return False
+            return False
 
         def check_cloudsql(self, resource):
             try:
@@ -220,6 +221,7 @@ class CKANProcessor(object):
                 if resource['name'] not in resources:
                     return False
                 return True
+            return False
 
         def check_bigquery(self, resource):
             try:
@@ -232,6 +234,7 @@ class CKANProcessor(object):
                 if resource['name'] not in datasets:
                     return False
                 return True
+            return False
 
         def check_pubsub(self, resource):
             try:
@@ -248,6 +251,7 @@ class CKANProcessor(object):
                 if resource['name'] not in resources:
                     return False
                 return True
+            return False
 
         def check_api(self, resource):
             if 'url' in resource:
@@ -255,7 +259,7 @@ class CKANProcessor(object):
 
                 if not response.ok:
                     return False
-                return True
+            return True
 
         def check_service(self, resource, service_name):
             if service_name not in self.project_services:
