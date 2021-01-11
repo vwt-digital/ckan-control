@@ -191,7 +191,7 @@ class CKANProcessor(object):
                         return True
             except Exception:
                 pass
-                raise ResourceNotFound(self.package, resource)
+            raise ResourceNotFound(self.package, resource)
 
         def check_cloudsql(self, resource):
             try:
