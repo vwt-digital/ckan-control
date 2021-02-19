@@ -52,12 +52,20 @@ class CKANProcessor(object):
 
         try:
             package = self.host.action.package_show(id=package_name)  # Retrieve package
-
-            for resource in package.get('resources', []):  # Delete package resources
-                self.host.action.resource_delete(id=resource['id'])
-
-            self.host.action.dataset_purge(id=package['id'])  # Purge package
-        except NotFound:
-            pass
+        except NotFound:  # Package does not exist
+            logging.error(f"Package '{package_name}' does not exist")
+            package = None
         except Exception:
             raise
+
+        if package:
+            for resource in package.get('resources', []):  # Delete package resources
+                resource_id = resource['id']
+                try:
+                    self.host.action.resource_delete(id=resource_id)
+                except NotFound:  # Resource does not exist
+                    resource_name = resource.get('name', resource_id)
+                    logging.error(f"Resource '{resource_name}' coud not be found")
+                except Exception:
+                    raise
+            self.host.action.dataset_purge(id=package['id'])  # Purge package
