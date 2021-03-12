@@ -12,7 +12,7 @@ import atlassian
 from google.auth import iam
 from google.auth.transport import requests as gcp_requests
 from google.oauth2 import service_account
-from google.cloud import resource_manager, secretmanager, storage, bigquery
+from google.cloud import secretmanager, storage, bigquery
 from google.cloud import pubsub_v1
 from google.api_core.exceptions import NotFound as GCP_NotFound
 from google.api_core.exceptions import Forbidden as GCP_Forbidden
@@ -45,7 +45,6 @@ class CKANProcessor(object):
         self.host = RemoteCKAN(self.ckan_host, apikey=self.ckan_api_key, session=self.session)
 
         self.credentials = request_auth_token()
-        self.resource_client = resource_manager.Client()
         self.stg_client = storage.Client(credentials=self.credentials)
         self.bq_client = bigquery.Client(credentials=self.credentials)
         self.publisher_client = pubsub_v1.PublisherClient(credentials=self.credentials)
@@ -63,22 +62,11 @@ class CKANProcessor(object):
         if status != 200:
             logging.error('CKAN not reachable')
             return False
-        # Get all projects on GCP that you have access to
-        gcp_projects = []
-        for project in self.resource_client.list_projects():
-            gcp_projects.append(project.name)
         # Get all groups of CKAN, they are based on GCP project IDs
         group_list = self.host.action.group_list()
         # For every group
         for group_project_id in group_list:
             not_found_resource = NotFoundResource(group_project_id)
-            # Check if project is in GCP projects
-            if group_project_id not in gcp_projects:
-                logging.info(f"Project ID {group_project_id} could not be found on GCP")
-                resource_url = f"https://console.cloud.google.com/home/dashboard?project={group_project_id}"
-                not_found_resources.append(not_found_resource.make_not_found("Project not found", "google-cloud-project",
-                                           group_project_id, "GCP Project", resource_url))
-                continue
             # Get project's services
             gcp_services = self.get_project_services(group_project_id)
             group = self.get_project_group(group_project_id)
