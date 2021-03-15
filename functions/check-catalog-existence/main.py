@@ -16,6 +16,7 @@ from google.cloud import secretmanager, storage, bigquery
 from google.cloud import pubsub_v1
 from google.api_core.exceptions import NotFound as GCP_NotFound
 from google.api_core.exceptions import Forbidden as GCP_Forbidden
+from google.api_core.exceptions import BadRequest as GCP_BadRequest
 from googleapiclient.errors import HttpError as GCP_httperror
 
 from ckanapi import RemoteCKAN, NotFound
@@ -229,6 +230,8 @@ class CKANProcessor(object):
             # does not work, it still gets the credentials project
             # When this is fixed, the right datasets can be returned
             return not_found_resources, [True]
+        except GCP_BadRequest as e:
+            logging.info(f"Listing services of Project ID {group_project_id} resulted in bigquery API but an error occured: {e}")
         datasets = [dataset.dataset_id for dataset in datasets_list]
         return not_found_resources, datasets
 
