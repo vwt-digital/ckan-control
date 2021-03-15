@@ -224,12 +224,8 @@ class CKANProcessor(object):
             resource_url = f"https://console.cloud.google.com/home/dashboard?project={group_project_id}"
             not_found_resources.append(not_found_resource.make_not_found("Project not found", "google-cloud-project", group_project_id,
                                                                          "GCP Project", resource_url))
-        except GCP_Forbidden:
-            logging.info(f"Listing services of Project ID {group_project_id} resulted in bigquery API but it is not used")
-            # TODO: for now returning list with True because setting the project variable in the BigQuery datasets call
-            # does not work, it still gets the credentials project
-            # When this is fixed, the right datasets can be returned
-            return not_found_resources, [True]
+        except GCP_Forbidden as e:
+            logging.info(f"Listing services of Project ID {group_project_id} resulted in bigquery API but an error occured: {e}")
         except GCP_BadRequest as e:
             logging.info(f"Listing services of Project ID {group_project_id} resulted in bigquery API but an error occured: {e}")
         datasets = [dataset.dataset_id for dataset in datasets_list]
@@ -271,12 +267,6 @@ class CKANProcessor(object):
                             success = self.check_list(resource_name, self.sql_databases)
                         elif resource_format == 'bigquery-dataset':
                             success = self.check_list(resource_name, self.bigquery_datasets)
-                            # TODO: remove below when the BigQuery API can set a project correctly,
-                            # see TODO in get_bigquery_datasets function
-                            if len(self.bigquery_datasets) == 1:
-                                if self.bigquery_datasets[0] is True:
-                                    success = True
-                            #############################################
                         elif resource_format == 'API':
                             success = self.check_api(resource)
                         elif resource_format in ['datastore', 'datastore-index']:
