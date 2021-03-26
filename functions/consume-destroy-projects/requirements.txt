@@ -24,7 +24,7 @@ pyasn1-modules==0.2.8
 pycparser==2.20
 python-slugify==4.0.1
 pytz==2020.5
-PyYAML==5.3.1
+PyYAML==5.4
 requests==2.25.1
 rsa==4.6
 six==1.15.0
