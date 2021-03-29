@@ -1,4 +1,4 @@
-ckanapi==4.3
+ckanapi==4.5
 dataclasses==0.6
 google-cloud-core==1.4.3
 google-cloud-logging==1.15.1
