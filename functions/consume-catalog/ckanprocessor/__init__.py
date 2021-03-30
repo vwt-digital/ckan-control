@@ -220,7 +220,7 @@ class CKANProcessor(object):
         except NotFound:
             logging.info(f"Creating dataset '{data_dict['name']}'")
             self.host.action.package_create(
-                **data_dict
+                name=data_dict["id"], data_dict=data_dict
             )  # Create package if not-existing
         except Exception:
             raise
