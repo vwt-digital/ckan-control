@@ -202,7 +202,6 @@ class CKANProcessor(object):
     def patch_dataset(self, data_dict):
         logging.info(f"Patching dataset '{data_dict['name']}'")
         current_resources_list = {}
-
         try:
             cur_package = self.host.action.package_show(
                 id=data_dict["name"]
@@ -220,7 +219,9 @@ class CKANProcessor(object):
         except NotFound:
             logging.info(f"Creating dataset '{data_dict['name']}'")
             self.host.action.package_create(
-                **data_dict
+                name=data_dict["name"],
+                data_dict=data_dict,
+                owner_org=data_dict["owner_org"],
             )  # Create package if not-existing
         except Exception:
             raise
