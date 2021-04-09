@@ -136,7 +136,9 @@ class CKANProcessor(object):
 
         else:
             logging.info("JSON request does not contain a dataset")
+        self.delete_resources(selector_data, group, future_packages_list)
 
+    def delete_resources(self, selector_data, group, future_packages_list):
         # Deleting resources existing in CKAN but not in data-catalog based on Project ID
         if "projectId" in selector_data:
             current_packages_list = []
@@ -251,7 +253,11 @@ class CKANProcessor(object):
                 len(to_create), len(to_update), len(to_delete), data_dict["name"]
             )
         )
+        self.patch_resources(to_update, future_list, current_list, to_create)
+        self.create_resources(to_create, future_list)
+        self.delete_resources_ckan(to_delete, current_list)
 
+    def patch_resources(self, to_update, future_list, current_list, to_create):
         # Patch resources
         for name in to_update:
             resource = future_list.get(name)
@@ -270,6 +276,7 @@ class CKANProcessor(object):
                     f"SearchError occured while patching resource '{resource['name']}'"
                 )
 
+    def create_resources(self, to_create, future_list):
         # Create resources
         for name in to_create:
             resource = future_list.get(name)
@@ -287,6 +294,7 @@ class CKANProcessor(object):
                     f"SearchError occured while creating resource '{resource['name']}'"
                 )
 
+    def delete_resources_ckan(self, to_delete, current_list):
         # Delete resources
         for name in to_delete:
             resource = current_list.get(name)
