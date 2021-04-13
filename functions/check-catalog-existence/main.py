@@ -394,31 +394,10 @@ class CKANProcessor(object):
                     if "format" in resource and "name" in resource:
                         resource_name = resource["name"]
                         resource_format = resource["format"]
-                        success = False
-                        if resource_format == "subscription":
-                            success = self.check_subscriptions(resource_name)
-                        elif resource_format == "topic":
-                            success = self.check_topics(resource_name)
-                        elif resource_format == "blob-storage":
-                            success = self.check_list(resource_name, self.buckets)
-                        elif resource_format == "cloudsql-instance":
-                            success = self.check_list(resource_name, self.sql_instances)
-                        elif resource_format == "cloudsql-db":
-                            success = self.check_list(resource_name, self.sql_databases)
-                        elif resource_format == "bigquery-dataset":
-                            success = self.check_list(
-                                resource_name, self.bigquery_datasets
-                            )
-                        elif resource_format == "API":
-                            success = self.check_api(resource)
-                        elif resource_format in ["datastore", "datastore-index"]:
-                            success = self.check_service("datastore.googleapis.com")
-                        elif resource_format == "firestore":
-                            success = self.check_service("firestore.googleapis.com")
-                        else:
-                            logging.debug(
-                                f"Skipping resource '{resource_name}' with format '{resource['format']}'"
-                            )
+                        success = self.check_resource_format(
+                            resource_format, resource_name, resource
+                        )
+                        if isinstance(success, str):
                             continue
                         if success is False:
                             resource_url = resource.get("url", "")
@@ -444,6 +423,33 @@ class CKANProcessor(object):
                     f"Dataset '{self.package_name}' does not have any resources"
                 )
             return self.not_found_resources
+
+        def check_resource_format(self, resource_format, resource_name, resource):
+            success = False
+            if resource_format == "subscription":
+                success = self.check_subscriptions(resource_name)
+            elif resource_format == "topic":
+                success = self.check_topics(resource_name)
+            elif resource_format == "blob-storage":
+                success = self.check_list(resource_name, self.buckets)
+            elif resource_format == "cloudsql-instance":
+                success = self.check_list(resource_name, self.sql_instances)
+            elif resource_format == "cloudsql-db":
+                success = self.check_list(resource_name, self.sql_databases)
+            elif resource_format == "bigquery-dataset":
+                success = self.check_list(resource_name, self.bigquery_datasets)
+            elif resource_format == "API":
+                success = self.check_api(resource)
+            elif resource_format in ["datastore", "datastore-index"]:
+                success = self.check_service("datastore.googleapis.com")
+            elif resource_format == "firestore":
+                success = self.check_service("firestore.googleapis.com")
+            else:
+                logging.debug(
+                    f"Skipping resource '{resource_name}' with format '{resource['format']}'"
+                )
+                success = "continue"
+            return success
 
         def check_subscriptions(self, subscription_name):
             if subscription_name.split("/")[-1] not in self.subscriptions:
