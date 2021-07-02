@@ -1,14 +1,16 @@
 import datetime
+import json
 import logging
 import os
-import sys
 
 import config
 import google.auth
+import googleapiclient.discovery
 import pytz
 import requests
 import urllib3
 from ckanapi import NotFound, RemoteCKAN
+from gobits import Gobits
 from google.api_core.exceptions import BadRequest as GCP_BadRequest
 from google.api_core.exceptions import Forbidden as GCP_Forbidden
 from google.api_core.exceptions import NotFound as GCP_NotFound
@@ -16,9 +18,6 @@ from google.auth import iam
 from google.auth.transport import requests as gcp_requests
 from google.cloud import bigquery, pubsub_v1, secretmanager, storage
 from google.oauth2 import service_account
-
-import atlassian
-import googleapiclient.discovery
 from googleapiclient.errors import HttpError as GCP_httperror
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -37,7 +36,8 @@ class CKANProcessor(object):
         self.ckan_host = os.environ.get("CKAN_SITE_URL")
         self.ckan_api_key_secret_id = os.environ.get("CKAN_API_KEY_SECRET_ID")
         self.project_id = os.environ.get("PROJECT_ID")
-
+        self.topic_name = config.TOPIC_NAME
+        self.topic_project_id = config.TOPIC_PROJECT_ID
         self.secret_client = secretmanager.SecretManagerServiceClient()
         ckan_api_key_secret = self.secret_client.access_secret_version(
             request={
@@ -140,8 +140,16 @@ class CKANProcessor(object):
                     ).process()
                 )
         self.subscriber_client.close()
-        if len(not_found_resources) > 0:
-            JiraProcessor(self.secret_client).create_issues(not_found_resources)
+        # Send issues to a topic
+        for not_found_resource in not_found_resources:
+            print(not_found_resource)
+            metadata = [Gobits().to_json()]
+            # TODO metadata.extend(gobits_metadata)
+            return_bool_publish_topic = self.publish_to_topic(
+                not_found_resource, metadata
+            )
+            if not return_bool_publish_topic:
+                return False
         return True
 
     def get_project_group(self, group_project_id):
@@ -479,6 +487,36 @@ class CKANProcessor(object):
                 return False
             return True
 
+    def publish_to_topic(self, message, gobits):
+        date = ""
+        if "received_on" in message:
+            date = message["received_on"]
+        msg = {"gobits": gobits, "data": message}
+        try:
+            # Publish to topic
+            publisher = pubsub_v1.PublisherClient()
+            topic_path = "projects/{}/topics/{}".format(
+                self.topic_project_id, self.topic_name
+            )
+            future = publisher.publish(
+                topic_path, bytes(json.dumps(msg).encode("utf-8"))
+            )
+            if date:
+                future.add_done_callback(
+                    lambda x: logging.debug("Published parsed ckan issue")
+                )
+            future.add_done_callback(
+                lambda x: logging.debug("Published parsed ckan issue")
+            )
+            logging.info("Published parsed ckan issue")
+            return True
+        except Exception as e:
+            logging.exception(
+                "Unable to publish parsed ckan issue"
+                + "to topic because of {}".format(e)
+            )
+        return False
+
 
 class NotFoundResource(object):
     def __init__(self, group_project_id):
@@ -499,102 +537,6 @@ class NotFoundResource(object):
             "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         }
         return not_found_dict
-
-
-class JiraProcessor(object):
-    def __init__(self, secret_client):
-        self.secret_client = secret_client
-
-    def create_issues(self, not_found_resources):
-        # Checking for JIRA attributes in configuration file
-        for item in [
-            "JIRA_ACTIVE",
-            "JIRA_USER",
-            "JIRA_SERVER",
-            "JIRA_PROJECT",
-            "JIRA_PROJECTS",
-            "JIRA_BOARD",
-            "JIRA_EPIC",
-            "JIRA_SECRET_ID",
-        ]:
-            if not hasattr(config, item):
-                logging.error(
-                    "Function has insufficient configuration for creating JIRA issues"
-                )
-                sys.exit(1)
-
-        if not config.JIRA_ACTIVE:
-            not_found_resources_names = [
-                resource["resource_name"] for resource in not_found_resources
-            ]
-            logging.info(
-                f"Creating JIRA tickets is manually disabled. Check processed a total of {len(not_found_resources)} "
-                f"missing resources: {', '.join(not_found_resources_names)}"
-            )
-            return None
-
-        # Setup configuration variables
-        gcp_project_id = os.environ.get("PROJECT_ID")
-        jira_user = config.JIRA_USER
-        jira_server = config.JIRA_SERVER
-        jira_project = config.JIRA_PROJECT
-        jira_projects = config.JIRA_PROJECTS
-        jira_board = config.JIRA_BOARD
-        jira_epic = config.JIRA_EPIC
-        jira_secret_id = config.JIRA_SECRET_ID
-
-        jira_api_key_secret = self.secret_client.access_secret_version(
-            request={
-                "name": f"projects/{gcp_project_id}/secrets/{jira_secret_id}/versions/latest"
-            }
-        )
-        jira_api_key = jira_api_key_secret.payload.data.decode("UTF-8")
-
-        # Create Jira instance
-        client = atlassian.jira_init(jira_user, jira_api_key, jira_server)
-
-        # Create Jira filters
-        jql_prefix = (
-            f"type = Bug AND status != Done AND status != Cancelled "
-            f'AND "Epic Link" = {jira_epic} '
-            'AND text ~ "CKAN resource not found" '
-            "AND project = "
-        )
-        projects = [jql_prefix + project for project in jira_projects.split("+")]
-        jql = " OR ".join(projects)
-
-        # Retrieve current issues and sprint ID
-        titles = atlassian.list_issue_titles(client, jql)
-        sprint_id = atlassian.get_current_sprint(client, jira_board)
-
-        # Create JIRA issue objects for non-existing packages that don't have a JIRA ticket already
-        for resource in not_found_resources:
-            title = f"CKAN resource not found: '{resource['resource_name']}'"
-
-            if title not in titles:
-                logging.info(f'Creating jira ticket: "{title}"')
-                if resource["package_name"] == "google-cloud-project":
-                    description = (
-                        f"The Google Cloud Project `{resource['project_id']}` could not be found. Please check the "
-                        "existence of the project within GCP, or remove the dataset from the data-catalog."
-                    )
-                else:
-                    description = (
-                        f"The resource `{resource['project_id']}/{resource['package_name']}/"
-                        f"{resource['resource_name']}` could not be identified by the automated data-catalog existence "
-                        f"check. Please check the existence of the resource within GCP, or remove the dataset resource "
-                        f"from the data-catalog."
-                    )
-
-                issue = atlassian.create_issue(
-                    client=client,
-                    project=jira_project,
-                    title=title,
-                    description=description,
-                )
-
-                atlassian.add_to_epic(client, jira_epic, issue.key)
-                atlassian.add_to_sprint(client, sprint_id, issue.key)
 
 
 def request_auth_token():
@@ -629,8 +571,8 @@ def check_catalog_existence(request):
         and "CKAN_SITE_URL" in os.environ
         and hasattr(config, "DELEGATED_SA")
     ):
-        proccess_bool = CKANProcessor().process()
-        if proccess_bool is False:
+        process_bool = CKANProcessor().process()
+        if process_bool is False:
             logging.info("Catalog existence check has not run")
         else:
             logging.info("Catalog existence check has run")
