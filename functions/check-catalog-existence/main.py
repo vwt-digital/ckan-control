@@ -66,7 +66,7 @@ class CKANProcessor(object):
 
         self.project_services = {}
 
-    def process(self):
+    def process(self, request):
         not_found_resources = []
         status = requests.head(self.ckan_host, verify=True).status_code
         if status != 200:
@@ -140,13 +140,14 @@ class CKANProcessor(object):
                     ).process()
                 )
         self.subscriber_client.close()
+
+        # Create gobits object
+        metadata = Gobits.from_request(request=request)
+
         # Send issues to a topic
         for not_found_resource in not_found_resources:
-            print(not_found_resource)
-            metadata = [Gobits().to_json()]
-            # TODO metadata.extend(gobits_metadata)
             return_bool_publish_topic = self.publish_to_topic(
-                not_found_resource, metadata
+                not_found_resource, [metadata.to_json()]
             )
             if not return_bool_publish_topic:
                 return False
@@ -564,14 +565,13 @@ def request_auth_token():
 
 def check_catalog_existence(request):
     logging.info("Initialized function")
-    logging.info(request)
     if (
         "PROJECT_ID" in os.environ
         and "CKAN_API_KEY_SECRET_ID" in os.environ
         and "CKAN_SITE_URL" in os.environ
         and hasattr(config, "DELEGATED_SA")
     ):
-        process_bool = CKANProcessor().process()
+        process_bool = CKANProcessor().process(request)
         if process_bool is False:
             logging.info("Catalog existence check has not run")
         else:
