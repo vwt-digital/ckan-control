@@ -564,7 +564,7 @@ def request_auth_token():
 
 def check_catalog_existence(request):
     logging.info("Initialized function")
-
+    logging.info(request)
     if (
         "PROJECT_ID" in os.environ
         and "CKAN_API_KEY_SECRET_ID" in os.environ
