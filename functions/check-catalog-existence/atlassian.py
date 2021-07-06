@@ -1,6 +1,10 @@
 from jira import JIRA
-from retry import retry
 from requests.exceptions import ConnectionError
+from retry import retry
+
+RETRY_TRIES = 3
+RETRY_DELAY = 2
+RETRY_BACKOFF = 2
 
 
 def jira_init(user, api_key, server):
@@ -17,7 +21,7 @@ def jira_init(user, api_key, server):
     return client
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def list_issue_titles(client, jql):
     """
     Lists jira issues based on a jira query.
@@ -30,7 +34,7 @@ def list_issue_titles(client, jql):
     return titles
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def create_issue(client, project, title, description, type='Bug'):
     """
     Creates a jira issue.
@@ -45,7 +49,7 @@ def create_issue(client, project, title, description, type='Bug'):
     return issue
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def get_current_sprint(client, board_id):
     """
     Returns the current sprint for a scrum board.
@@ -64,7 +68,7 @@ def get_current_sprint(client, board_id):
     return current_sprint.id
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def add_to_sprint(client, sprint_id, issue_key):
     """
     Adds issues to a sprint.
@@ -73,7 +77,7 @@ def add_to_sprint(client, sprint_id, issue_key):
     client.add_issues_to_sprint(sprint_id, [issue_key])
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def add_to_epic(client, epic_id, issue_key):
     """
     Adds issues to an epic.
@@ -81,7 +85,7 @@ def add_to_epic(client, epic_id, issue_key):
     client.add_issues_to_epic(epic_id, [issue_key])
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def list_issue_comment_ids(client, issue_id):
     """
     Get jira issue from its ID
@@ -92,7 +96,7 @@ def list_issue_comment_ids(client, issue_id):
     return issue.fields.comment.comments
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def get_issue_id(client, issue):
     """
     Get issue ids based on a jira query.
@@ -101,7 +105,7 @@ def get_issue_id(client, issue):
     return issue.id
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def add_comment(client, issue, comment):
     """
     Add a comment to an issue
@@ -110,7 +114,7 @@ def add_comment(client, issue, comment):
     client.add_comment(issue, comment)
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def update_comment(client, issue, comment_id, comment):
     """
     Update a comment of an issue
@@ -120,7 +124,7 @@ def update_comment(client, issue, comment_id, comment):
     comment_to_edit.update(body=comment)
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def get_comment_body(client, issue, comment_id):
     """
     Get body of a comment of an issue
@@ -131,7 +135,7 @@ def get_comment_body(client, issue, comment_id):
     return comment_body
 
 
-@retry(ConnectionError, tries=3, delay=2, backoff=2)
+@retry(ConnectionError, tries=RETRY_TRIES, delay=RETRY_DELAY, backoff=RETRY_BACKOFF)
 def list_issues(client, jql):
     """
     Get issues based on a jira query.
