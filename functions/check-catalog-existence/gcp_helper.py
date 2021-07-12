@@ -38,9 +38,6 @@ class GCPHelper:
         if not hasattr(messages, "__len__"):
             messages = [messages]
         for message in messages:
-            date = ""
-            if "received_on" in message:
-                date = message["received_on"]
             msg = {"gobits": gobits, "data": message}
             try:
                 # Publish to topic
@@ -51,10 +48,6 @@ class GCPHelper:
                 future = publisher.publish(
                     topic_path, bytes(json.dumps(msg).encode("utf-8"))
                 )
-                if date:
-                    future.add_done_callback(
-                        lambda x: logging.debug("Published parsed ckan issue")
-                    )
                 future.add_done_callback(
                     lambda x: logging.debug("Published parsed ckan issue")
                 )
