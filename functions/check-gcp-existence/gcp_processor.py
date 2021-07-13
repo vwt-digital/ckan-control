@@ -33,7 +33,9 @@ class GCPProcessor(object):
         return not_found_resources
 
     def is_default_resource(self, name):
-        keywords = ['.appspot.com', 'cloud-builds', 'gcf-sources', '_cloudbuild']
+        keywords = ['.appspot.com', 'cloud-builds', 'gcf-sources',
+                    '_cloudbuild', '-hst-sa-stg', '-history-stg',
+                    '-history-sub']
         return_value = False
         for k in keywords:
             if k in name:
@@ -68,6 +70,7 @@ class GCPProcessor(object):
                 for resource in ckan_resources:
                     if "format" in resource and "name" in resource:
                         ckan_resources_search += ':' + resource["name"] + ':' + resource["format"]
+
             # Get topics belonging to project ID
             not_found_resources, topics = self.gcp_service.get_topics(
                 not_found_resource, gcp_services, not_found_resources, project_id
@@ -81,6 +84,7 @@ class GCPProcessor(object):
             not_found_resources, buckets = self.gcp_service.get_buckets(
                 not_found_resource, gcp_services, not_found_resources, project_id
             )
+
             # Get SQL instances belonging to project ID
             not_found_resources, sql_instances = self.gcp_service.get_sql_instances(
                 not_found_resource, gcp_services, not_found_resources, project_id
@@ -108,7 +112,7 @@ class GCPProcessor(object):
             }
             for key, value in resources.items():
                 for resource_name in value:
-                    search = ':' + resource_name + ':' + key + ':'
+                    search = ':' + resource_name + ':' + key
                     if search not in ckan_resources_search and not self.is_default_resource(resource_name):
                         logging.info(
                             f"Resource {resource_name} could not be found on CKAN while it still exists in GCP"
