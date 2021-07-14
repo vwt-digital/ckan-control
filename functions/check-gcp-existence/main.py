@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("googleapiclient.http").setLevel(logging.ERROR)
 
 
-def check_catalog_existence(request):
+def check_gcp_existence(request):
     logging.info("Initialized function")
     if (
             "PROJECT_ID" in os.environ
@@ -28,4 +28,4 @@ def check_catalog_existence(request):
 
 
 if __name__ == "__main__":
-    check_catalog_existence(None)
+    check_gcp_existence(None)

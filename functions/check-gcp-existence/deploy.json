@@ -1,6 +1,0 @@
-{
-  "entry-point": "check_gcp_existence",
-  "memory": "256MB",
-  "runtime": "python37",
-  "timeout": "540"
-}
