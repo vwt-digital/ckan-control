@@ -4,8 +4,7 @@ import logging
 import os
 
 import requests
-
-from ckanprocessor import CKANProcessor
+from ckan_processor import CKANProcessor
 
 parser = CKANProcessor()
 
@@ -37,5 +36,5 @@ def json_to_ckan(request):
         raise e
 
     # Returning any 2xx status indicates successful receipt of the message.
-    # 204: no content, delivery successfull, no further actions needed
+    # 204: no content, delivery successful, no further actions needed
     return "OK", 204
