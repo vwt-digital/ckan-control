@@ -1,8 +1,9 @@
+import logging
 import os
+
+import requests
 from ckanapi import NotFound, RemoteCKAN, SearchError, ValidationError
 from google.cloud import secretmanager
-import logging
-import requests
 
 
 class CKANService:
@@ -31,7 +32,7 @@ class CKANService:
             for package in self.host.action.group_show(
                     id=group["id"], include_datasets=True
             ).get("packages", []):
-                if package["project_id"] == group["name"]:
+                if 'project_id' in package and package["project_id"] == group["name"]:
                     current_packages_list.append(package["name"])
 
             packages_to_delete = list(
@@ -104,6 +105,18 @@ class CKANService:
             self.host.action.package_patch(
                 id=data_dict["id"], data_dict=data_dict
             )  # Patch package
+
+            # Check if package is not linked to group(s) and link them
+            name = data_dict["name"]
+            package = self.host.action.package_show(
+                id=name
+            )
+            if len(package['groups']) != len(data_dict['groups']):
+                match = {"groups": package['groups'], "name": name}
+                update = {"groups": data_dict['groups']}
+                self.host.action.package_revise(match=match, update=update)
+                logging.info(f"Linked a package '{name}' to '{len(data_dict['groups'])}' group(s)")
+
         except NotFound:
             logging.info(f"Creating dataset '{data_dict['name']}'")
             self.host.action.package_create(
@@ -159,7 +172,7 @@ class CKANService:
                 to_create.append(resource["name"])
             except SearchError:
                 logging.error(
-                    f"SearchError occured while patching resource '{resource['name']}'"
+                    f"SearchError occurred while patching resource '{resource['name']}'"
                 )
 
     def create_resources(self, to_create, future_list):
@@ -177,7 +190,7 @@ class CKANService:
                 self.host.action.resource_patch(**resource)
             except SearchError:
                 logging.error(
-                    f"SearchError occured while creating resource '{resource['name']}'"
+                    f"SearchError occurred while creating resource '{resource['name']}'"
                 )
 
     def delete_resources_ckan(self, to_delete, current_list):
