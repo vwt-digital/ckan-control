@@ -259,8 +259,11 @@ class GCPService:
             for project in response.get("projects", [])
         ]
         # filter projects according to environment
-        env = config.CKAN_API_KEY.replace('vwt-', '')[0]
-        r = re.compile("vwt-{}-*".format(env))
+        topic_name = config.TOPIC_NAME
+        env = re.search('-[p|d]-', topic_name)[0]
+        prefix = topic_name.partition(env)[0]
+        env = env.replace('-', '')
+        r = re.compile("{}-{}-*".format(prefix, env))
         projects = list(filter(r.match, projects))
         return projects
 
