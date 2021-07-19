@@ -113,7 +113,7 @@ class CKANService:
             )
             if len(package['groups']) != len(data_dict['groups']):
                 match = {"groups": package['groups'], "name": name}
-                update = {"groups": data_dict['groups']}
+                update = {"groups": [{'name': group['name']} for group in data_dict['groups']]}
                 self.host.action.package_revise(match=match, update=update)
                 logging.info(f"Linked a package '{name}' to '{len(data_dict['groups'])}' group(s)")
 
