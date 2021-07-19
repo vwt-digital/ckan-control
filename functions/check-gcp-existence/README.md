@@ -18,7 +18,8 @@ Function to check the existence of GCP package's resources on the Google Cloud P
     CKAN_API_KEY = The CKAN API key to access the database
     CKAN_SITE_URL = The host URL of CKAN
     JIRA_API_KEY = The JIRA API key to create issues for non-existing resources
-    ~~~
+    DEFAULT_RESOURCE_FILTER = Keywords used to filter out default resources e.g., '.appspot.com', 'cloud-builds'
+   ~~~
 3. Create a custom Google Cloud Platform role and assign this to the delegated service account (see [Permissions](#permissions));
 4. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
 

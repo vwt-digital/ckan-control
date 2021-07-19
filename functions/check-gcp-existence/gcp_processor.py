@@ -33,11 +33,8 @@ class GCPProcessor(object):
         return not_found_resources
 
     def is_default_resource(self, name):
-        keywords = ['.appspot.com', 'cloud-builds', 'gcf-sources',
-                    '_cloudbuild', '-hst-sa-stg', '-history-stg',
-                    '-history-sub']
         return_value = False
-        for k in keywords:
+        for k in config.DEFAULT_RESOURCE_FILTER:
             if k in name:
                 return_value = True
                 break
