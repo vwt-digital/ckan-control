@@ -1,7 +1,0 @@
-ckanapi==4.5
-dataclasses==0.6
-google-cloud-core==1.4.3
-google-cloud-logging==1.15.1
-google-cloud-secret-manager==2.0.0
-google-cloud-storage==1.32.0
-requests==2.25.1

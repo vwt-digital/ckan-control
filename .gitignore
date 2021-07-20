@@ -2,7 +2,6 @@
 *Config.py
 .vscode/
 functions/consume-catalog/main-test.py
-functions/consume-catalog/check_storage.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
