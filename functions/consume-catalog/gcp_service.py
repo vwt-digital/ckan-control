@@ -24,10 +24,11 @@ class GCPService:
         if storage.Blob(bucket=storage_bucket, name=blob_name).exists(storage_client_external):
             # Get blob
             blob = storage_bucket.get_blob(blob_name)
-            # Convert to string
-            blob_json_string = blob.download_as_string()
-            # Convert to json
-            blob_json = json.loads(blob_json_string)
-            # return blob in json format
-            return blob_json
+            if blob:
+                # Convert to string
+                blob_json_string = blob.download_as_string()
+                # Convert to json
+                blob_json = json.loads(blob_json_string)
+                # return blob in json format
+                return blob_json
         return None
