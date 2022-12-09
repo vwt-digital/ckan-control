@@ -8,7 +8,7 @@ cachetools==4.2.2
     # via
     #   -r requirements.in
     #   google-auth
-certifi==2021.5.30
+certifi==2022.12.7
     # via
     #   -r requirements.in
     #   requests
